@@ -1,5 +1,5 @@
 import polars as pl
-from pomap import Pomap
+from pomap_v2.pomap import Pomap
 
 
 class CategoricalPomap(Pomap):

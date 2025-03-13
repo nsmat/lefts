@@ -29,11 +29,12 @@ class _Pomap:
     #   After this, things get interesting, since we start to deal with how the pomap actually behaves
     # COMPOSITION
 
-    def product(self, other: Self):
+    def product(self, other: "_Pomap") -> "_Pomap":
         # This composition assumes that ONLY the product operation is possible, not the sum.
 
         overlapping_names = set(self._nodes).intersection(other._nodes)
         assert overlapping_names == set(), f"Cannot compose two Pomaps with overlapping names. Found {overlapping_names} in common"
+
         return _Pomap(nodes=self._nodes + other._nodes, name=f'{self.name} + {other.name}')
 
     @property
@@ -51,7 +52,7 @@ class _Pomap:
         return df
 
     @staticmethod
-    def _find_leaf_nodes(node: _Pomap):
+    def _find_leaf_nodes(node):
         if (len(node._nodes) == 1) and (node._nodes[0] is node):
             return [node]
 
