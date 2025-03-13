@@ -16,7 +16,7 @@ class CategoricalPoMap(PoMap):
 
         labels = []
         for values in combinations:
-            # Associate each element in the product space with the appropiate key
+            # Associate each element in the product space with the appropriate key
             label = dict(zip(self._dims_to_labels.keys(), values))
             labels.append(label)
 
