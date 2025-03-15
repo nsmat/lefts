@@ -24,12 +24,10 @@ class _Pomap:
         for node in self._nodes:
             if node.name == 'arg':
                 return node
-        raise ValueError(f'Pomap has no node {arg}')
+        raise ValueError(f'PoMap has no node {arg}')
 
     # -=-=-=-=-=-=-=--=-=-==-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=--=-
     #   After this, things get interesting, since we start to deal with how the pomap actually behaves
-    # COMPOSITION
-
     def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
 
         # Reference columns or names?
@@ -82,43 +80,65 @@ class _Pomap:
         return df
 
     def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: str) -> pl.DataFrame:
-        funcs = {'train': ('label_rows_as_train', '_train_column_name'),
-                 'test': ('label_rows_as_test', '_test_column_name'),
-                 'validate': ('label_rows_as_validate', '_validate_column_name')
-                 }
 
-        label_as_method, column_name_method = funcs[label_as]
+        column_name_method = {
+            'train': self._train_column_name,
+            'test': self._test_column_name,
+            'validate': self._validate_column_name
+            }[label_as]
 
         node_columns = []
         for node in self._nodes:
-            node_sub_label = {node.reference_column: label[node.reference_column]}
-            df = getattr(node, label_as_method)(df, node_sub_label)
-            node_columns.append(getattr(node, column_name_method)(node_sub_label))
+            label_as_method = {
+                'train': node.label_rows_as_train,
+                 'test': node.label_rows_as_test,
+                 'validate': node.label_rows_as_validate
+                     }[label_as]
 
-        # We satisfy the condition if we satisfy the condition for every sub map
+            node_sub_label = {node.reference_column: label[node.reference_column]}
+            df = label_as_method(df, node_sub_label)
+            node_columns.append(column_name_method(node_sub_label))
+
+        # We satisfy the condition for the composed map if we satisfy the condition for every sub map
         df = df.with_columns(__per_node_results=pl.concat_list(node_columns))
         df = df.with_columns(
             pl.col('__per_node_results').list.all()
             .alias(
-                getattr(self, column_name_method)(label))
+                column_name_method(label))
         )
         df = df.drop('__per_node_results', *node_columns)
 
         return df
 
 
-    #### Model Interface
-    def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self.label_rows_as_train(df, label)
-        df = df.filter(
-            self._train_column_name(label)
-        )
-        df = df.drop(
-            self._train_column_name(label)
-        )
+    def _label_to(self, df: pl.DataFrame, label: dict, label_to: str) -> pl.DataFrame:
+        funcs = {
+            'train': (self.label_rows_as_train, self._train_column_name),
+            'test': (self.label_rows_as_test, self._test_column_name),
+            'validate': (self.label_rows_as_validate, self._validate_column_name),
+        }
+
+        label_func, column_name_func = funcs[label_to]
+        df = label_func(df, label)
+        df = df.filter(column_name_func(label)).drop(column_name_func(label))
 
         return df
 
+
+    #### Model Interface
+    def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self._label_to(df, label, 'train')
+        return df
+
+    #### Model Interface
+    def label_to_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self._label_to(df, label, 'train')
+        return df
+
+    #### Model Interface
+    def label_to_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self._label_to(df, label, 'validate')
+        return df
 
 
 class Pomap(_Pomap):
