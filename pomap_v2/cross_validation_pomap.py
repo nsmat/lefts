@@ -10,7 +10,7 @@ class RandomisedCrossValidationPoMap(Pomap):
         self.index_column = index_column
         self.fold_labels = [str(c) for c in range(num_folds)]
         self._test_label_mapping = {}
-    
+
     def index_to_label(self, label):
         if label not in self._test_label_mapping:
             self._test_label_mapping[label] = choice(self.fold_labels)
