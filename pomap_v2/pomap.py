@@ -30,7 +30,7 @@ class _Pomap:
     #   After this, things get interesting, since we start to deal with how the pomap actually behaves
     # COMPOSITION
 
-    def product(self, other: "_Pomap") -> "_Pomap":
+    def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
 
         # Reference columns or names?
         self_reference_columns = {n.reference_column for n in self._nodes}
@@ -40,8 +40,9 @@ class _Pomap:
         assert overlapping_reference_columns == set(), f"Cannot compose two Pomaps with overlapping reference_columns. Found {overlapping_reference_columns} in common"
 
         # This composition assumes that ONLY the product operation is possible, not the sum.
+        product_name = product_name if product_name else f'{self.name} + {other.name}'
         return _Pomap(nodes=self._nodes + other._nodes,
-                      name=f'{self.name} + {other.name}',
+                      name=product_name,
                       reference_column=None
                       )
 
