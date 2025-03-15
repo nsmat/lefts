@@ -64,30 +64,45 @@ class _Pomap:
 
     # Need to implement these in terms of the composed logic
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self._label_rows_as(df, label, label_as='train')
+        return df
+
+    def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self._label_rows_as(df, label, label_as='test')
+        return df
+
+    def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self._label_rows_as(df, label, label_as='validate')
+        return df
+
+    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as='train') -> pl.DataFrame:
+        funcs = {'train': ('label_rows_as_train', '_train_column_name'),
+                 'test': ('label_rows_as_test', '_test_column_name'),
+                 'validate': ('label_rows_as_validate', '_validate_column_name')
+                 }
+
+        label_as_method, column_name_method = funcs[label_as]
 
         node_columns = []
         for node in self._nodes:
             node_sub_label = label[node.name]
-            df = node.label_rows_as_train(df, node_sub_label)
-            node_columns.append(node._train_column_name(node_sub_label))
+            df = getattr(node, label_as_method)(df, node_sub_label)
+            node_columns.append(getattr(node, column_name_method)(node_sub_label))
 
+        # We satisfy the condition if we satisfy the condition for every sub map
         df = df.with_columns(node_trains=pl.concat_list(node_columns))
         df = df.with_columns(
-            pl.col('node_trains').list.all()
-            .alias(self._train_column_name(label))
+            pl.col('__per_node_results').list.all()
+            .alias(
+                getattr(self, column_name_method)(label))
         )
-        df = df.drop('node_trains', *node_columns)
+        df = df.drop('__per_node_results', *node_columns)
 
         return df
 
-    def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        pass
-
-    def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        pass
 
     #### Model Interface
-    def label_to_train(self, df: pl.DataFrame, label: dict):
+    def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self.label_rows_as_train(df, label)
         df = df.filter(
             self.train_column_name(label)
