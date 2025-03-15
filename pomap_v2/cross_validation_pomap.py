@@ -1,7 +1,6 @@
-from pomap import Pomap
+from pomap_v2.pomap import Pomap
 import polars as pl
-import numpy as np
-
+from random import choice
 
 class RandomisedCrossValidationPoMap(Pomap):
 
@@ -11,10 +10,10 @@ class RandomisedCrossValidationPoMap(Pomap):
         self.index_column = index_column
         self.fold_labels = [str(c) for c in range(num_folds)]
         self._test_label_mapping = {}
-
+    
     def index_to_label(self, label):
         if label not in self._test_label_mapping:
-            self._test_label_mapping[label] = np.random.choice(self.fold_labels)
+            self._test_label_mapping[label] = choice(self.fold_labels)
         return self._test_label_mapping[label]
 
     def label_rows_as_test(self, df: pl.DataFrame, label: dict):
