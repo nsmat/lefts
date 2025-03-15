@@ -39,11 +39,8 @@ class _Pomap:
 
     @property
     def labels(self) -> pl.DataFrame:
-        # TODO this will have to change if we introduce a product operation
-        # (or any other composition)
-        # Since we will need to recurse through the syntax tree and
-        # pluck out the labels of all the child nodes
-
+        # TODO this is currently overkill, because our 'tree' is just a path.
+        # However, it will be necessary if we add a product operation
         leaf_nodes = self._find_leaf_nodes(self)
         leaf_labels = [node.labels for node in leaf_nodes]
 
