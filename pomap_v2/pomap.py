@@ -102,10 +102,10 @@ class _Pomap:
     def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self.label_rows_as_train(df, label)
         df = df.filter(
-            self.train_column_name(label)
+            self._train_column_name(label)
         )
         df = df.drop(
-            self.train_column_name(label)
+            self._train_column_name(label)
         )
 
         return df

@@ -13,19 +13,19 @@ class CategoricalPomap(Pomap):
     def labels(self) -> pl.Series:
         return pl.Series(values=self._labels, name=self.name)
 
-    def _label_rows_as(self, df, label, column_name) -> pl.DataFrame:
+    def _label_rows_as(self, df: pl.DataFrame, label:dict, column_name: str) -> pl.DataFrame:
         df = df.with_columns(
-            (pl.col(self._column) == label).alias(column_name)
+            (pl.col(self._column) == label[self._column]).alias(column_name)
         )
 
         return df
 
-    def label_rows_as_train(self, df: pl.DataFrame, label) -> pl.DataFrame:
+    def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         return self._label_rows_as(df, label, self._train_column_name(label))
 
-    def label_rows_as_test(self, df: pl.DataFrame, label) -> pl.DataFrame:
+    def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         return self._label_rows_as(df, label, self._test_column_name(label))
 
-    def label_rows_as_validate(self, df: pl.DataFrame, label) -> pl.DataFrame:
+    def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         return self._label_rows_as(df, label, self._validate_column_name(label))
 
