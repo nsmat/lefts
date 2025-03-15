@@ -2,7 +2,7 @@ import polars as pl
 from typing import Self, Optional
 from functools import reduce
 
-# TODO - allow better labels by adding a reference column instead
+
 class _Pomap:
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
@@ -85,15 +85,15 @@ class _Pomap:
             'train': self._train_column_name,
             'test': self._test_column_name,
             'validate': self._validate_column_name
-            }[label_as]
+        }[label_as]
 
         node_columns = []
         for node in self._nodes:
             label_as_method = {
                 'train': node.label_rows_as_train,
-                 'test': node.label_rows_as_test,
-                 'validate': node.label_rows_as_validate
-                     }[label_as]
+                'test': node.label_rows_as_test,
+                'validate': node.label_rows_as_validate
+            }[label_as]
 
             node_sub_label = {node.reference_column: label[node.reference_column]}
             df = label_as_method(df, node_sub_label)
@@ -110,7 +110,6 @@ class _Pomap:
 
         return df
 
-
     def _label_to(self, df: pl.DataFrame, label: dict, label_to: str) -> pl.DataFrame:
         funcs = {
             'train': (self.label_rows_as_train, self._train_column_name),
@@ -123,7 +122,6 @@ class _Pomap:
         df = df.filter(column_name_func(label)).drop(column_name_func(label))
 
         return df
-
 
     #### Model Interface
     def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:

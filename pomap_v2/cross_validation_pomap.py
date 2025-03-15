@@ -22,7 +22,7 @@ class RandomisedCrossValidationPoMap(Pomap):
 
         # Every row is randomly assigned to one of the possible folds
         all_indexes = df.select(self.index_column).unique()
-        index_to_label_dict = {index: self.index_to_label(index)for index in all_indexes}
+        index_to_label_dict = {index: self.index_to_label(index) for index in all_indexes}
 
         df = df.with_columns(
             pl.col(self.index_column)
@@ -33,7 +33,6 @@ class RandomisedCrossValidationPoMap(Pomap):
         return df
 
     def label_rows_as_train(self, df, label):
-
         df = self.label_rows_as_test(df, label)
         test_column = self._test_column_name(label)
 
