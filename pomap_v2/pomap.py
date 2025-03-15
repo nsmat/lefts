@@ -1,20 +1,21 @@
 import polars as pl
-from typing import Self
+from typing import Self, Optional
 from functools import reduce
 
 # TODO - allow better labels by adding a reference column instead
 class _Pomap:
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
-    def __init__(self, nodes: list[Self], name: str):
+    def __init__(self, nodes: list[Self], name: str, reference_column: Optional[str]):
 
         self.name = name
         self._nodes = nodes
+        self.reference_column = reference_column
 
         # Implement some standardised naming for the subclasses to use
-        self._train_column_name = lambda label: f'train({self.name}={label})'
-        self._test_column_name = lambda label: f'test({self.name}={label})'
-        self._validate_column_name = lambda label: f'validate({self.name}={label})'
+        self._train_column_name = lambda label: f'train({label})'
+        self._test_column_name = lambda label: f'test({label})'
+        self._validate_column_name = lambda label: f'validate({label})'
 
     def __repr__(self):
         return self.name
@@ -30,12 +31,19 @@ class _Pomap:
     # COMPOSITION
 
     def product(self, other: "_Pomap") -> "_Pomap":
+
+        # Reference columns or names?
+        self_reference_columns = {n.reference_column for n in self._nodes}
+        other_reference_columns = {n.reference_column for n in other._nodes}
+
+        overlapping_reference_columns = self_reference_columns.intersection(other_reference_columns)
+        assert overlapping_reference_columns == set(), f"Cannot compose two Pomaps with overlapping reference_columns. Found {overlapping_reference_columns} in common"
+
         # This composition assumes that ONLY the product operation is possible, not the sum.
-
-        overlapping_names = set(self._nodes).intersection(other._nodes)
-        assert overlapping_names == set(), f"Cannot compose two Pomaps with overlapping names. Found {overlapping_names} in common"
-
-        return _Pomap(nodes=self._nodes + other._nodes, name=f'{self.name} + {other.name}')
+        return _Pomap(nodes=self._nodes + other._nodes,
+                      name=f'{self.name} + {other.name}',
+                      reference_column=None
+                      )
 
     @property
     def labels(self) -> pl.DataFrame:
@@ -44,7 +52,7 @@ class _Pomap:
         leaf_nodes = self._find_leaf_nodes(self)
         leaf_labels = [node.labels for node in leaf_nodes]
 
-        df = reduce(lambda left, right: left.to_frame().join(right.to_frame(), how='cross'), leaf_labels)
+        df = reduce(lambda left, right: left.join(right, how='cross'), leaf_labels)
 
         return df
 
@@ -72,7 +80,7 @@ class _Pomap:
         df = self._label_rows_as(df, label, label_as='validate')
         return df
 
-    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as='train') -> pl.DataFrame:
+    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: str) -> pl.DataFrame:
         funcs = {'train': ('label_rows_as_train', '_train_column_name'),
                  'test': ('label_rows_as_test', '_test_column_name'),
                  'validate': ('label_rows_as_validate', '_validate_column_name')
@@ -82,12 +90,12 @@ class _Pomap:
 
         node_columns = []
         for node in self._nodes:
-            node_sub_label = label[node.name]
+            node_sub_label = {node.reference_column: label[node.reference_column]}
             df = getattr(node, label_as_method)(df, node_sub_label)
             node_columns.append(getattr(node, column_name_method)(node_sub_label))
 
         # We satisfy the condition if we satisfy the condition for every sub map
-        df = df.with_columns(node_trains=pl.concat_list(node_columns))
+        df = df.with_columns(__per_node_results=pl.concat_list(node_columns))
         df = df.with_columns(
             pl.col('__per_node_results').list.all()
             .alias(
@@ -114,11 +122,11 @@ class _Pomap:
 
 class Pomap(_Pomap):
 
-    def __init__(self, name: str):
-        super().__init__(nodes=[self], name=name)
+    def __init__(self, name: str, reference_column: str):
+        super().__init__(nodes=[self], name=name, reference_column=reference_column)
 
     @property
-    def labels(self, other: Self) -> pl.Series:
+    def labels(self) -> pl.DataFrame:
         raise NotImplementedError
 
     # These three (train, test, validate) functions define the behaviour of the PoMap.
