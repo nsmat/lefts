@@ -38,7 +38,7 @@ class _Pomap:
         assert overlapping_reference_columns == set(), f"Cannot compose two Pomaps with overlapping reference_columns. Found {overlapping_reference_columns} in common"
 
         # This composition assumes that ONLY the product operation is possible, not the sum.
-        product_name = product_name if product_name else f'{self.name} + {other.name}'
+        product_name = product_name if product_name else f'{self.name} x {other.name}'
         return _Pomap(nodes=self._nodes + other._nodes,
                       name=product_name,
                       reference_column=None
