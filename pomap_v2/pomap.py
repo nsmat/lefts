@@ -128,12 +128,10 @@ class _Pomap:
         df = self._label_to(df, label, 'train')
         return df
 
-    #### Model Interface
     def label_to_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_to(df, label, 'train')
         return df
 
-    #### Model Interface
     def label_to_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_to(df, label, 'validate')
         return df
