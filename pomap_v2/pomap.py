@@ -89,14 +89,19 @@ class _Pomap:
 
         node_columns = []
         for node in self._nodes:
-            label_as_method = {
+            label_as_method_map = {
                 'train': node.label_rows_as_train,
                 'test': node.label_rows_as_test,
                 'validate': node.label_rows_as_validate
-            }[label_as]
+            }
+
+            label_as_method = label_as_method_map[label_as]
+
+            # TODO here we need to add in some handling of the case where a
+            # label is 'incomplete' across the reference columns
 
             node_sub_label = {node.reference_column: label[node.reference_column]}
-            df = label_as_method(df, node_sub_label)
+            df = label_as_method(df=df, label=node_sub_label)
             node_columns.append(column_name_method(node_sub_label))
 
         # We satisfy the condition for the composed map if we satisfy the condition for every sub map
