@@ -1,59 +1,65 @@
 import polars as pl
-from typing import Self, Optional
+from typing import Self, Literal
 from functools import reduce
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class LabelKey:
+    pomap_name: str
+    label: dict
+
+    def __repr__(self):
+        return f"{self.pomap_name}:{self.label}"
 
 
 class _Pomap:
+    __COMPOSITION_TYPES = Literal["leaf", "product", "sum"]
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
-    def __init__(self, nodes: list[Self], name: str, reference_column: Optional[str]):
+    def __init__(self,
+                 nodes: list[Self],
+                 name: str,
+                 composition_type: __COMPOSITION_TYPES
+                 ):
 
         self.name = name
         self._nodes = nodes
-        self.reference_column = reference_column
+        self.composition_type = composition_type
 
         # Implement some standardised naming for the subclasses to use
         self._train_column_name = lambda label: f'train({label})'
         self._test_column_name = lambda label: f'test({label})'
         self._validate_column_name = lambda label: f'validate({label})'
 
-    def __repr__(self):
-        return self.name
 
-    def __getitem__(self, arg: str):
-        for node in self._nodes:
-            if node.name == 'arg':
-                return node
-        raise ValueError(f'PoMap has no node {arg}')
-
-    # -=-=-=-=-=-=-=--=-=-==-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=--=-
-    #   After this, things get interesting, since we start to deal with how the pomap actually behaves
     def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
-
-        # Reference columns or names?
-        self_reference_columns = {n.reference_column for n in self._nodes}
-        other_reference_columns = {n.reference_column for n in other._nodes}
-
-        overlapping_reference_columns = self_reference_columns.intersection(other_reference_columns)
-        assert overlapping_reference_columns == set(), f"Cannot compose two Pomaps with overlapping reference_columns. Found {overlapping_reference_columns} in common"
-
-        # This composition assumes that ONLY the product operation is possible, not the sum.
         product_name = product_name if product_name else f'{self.name} x {other.name}'
-        return _Pomap(nodes=self._nodes + other._nodes,
+        return _Pomap(nodes=[self, other],
                       name=product_name,
-                      reference_column=None
+                      composition_type='product'
                       )
+
+    def sum(self, other: "_Pomap", sum_name=None) -> "_Pomap":
+        sum_name = sum_name or f"{self.name} + {other.name}"
+        return _Pomap(
+            nodes=[self, other],
+            name=sum_name,
+            composition_type="sum"
+        )
 
     @property
     def labels(self) -> pl.DataFrame:
-        # TODO this is currently overkill, because our 'tree' is just a path.
-        # However, it will be necessary if we add a product operation
         leaf_nodes = self._find_leaf_nodes(self)
         leaf_labels = [node.labels for node in leaf_nodes]
 
-        df = reduce(lambda left, right: left.join(right, how='cross'), leaf_labels)
-
-        return df
+        if self.composition_type == "product":
+            # A product node should return the cross product of its children
+            return reduce(lambda left, right: left.join(right, how="cross"), leaf_labels)
+        elif self.composition_type == "sum":
+            return pl.concat(leaf_labels)
+        else:  # If not a product, you are a leaf
+            return leaf_labels[0]
 
     @staticmethod
     def _find_leaf_nodes(node):
@@ -66,7 +72,6 @@ class _Pomap:
 
         return leaf_nodes
 
-    # Need to implement these in terms of the composed logic
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
         return df
@@ -97,20 +102,21 @@ class _Pomap:
 
             label_as_method = label_as_method_map[label_as]
 
-            # TODO here we need to add in some handling of the case where a
-            # label is 'incomplete' across the reference columns
+            df = label_as_method(df=df, label=label)
+            node_columns.append(column_name_method(label))
 
-            node_sub_label = {node.reference_column: label[node.reference_column]}
-            df = label_as_method(df=df, label=node_sub_label)
-            node_columns.append(column_name_method(node_sub_label))
+        # We evaluate the match to a label differently depending on the
+        # composition type of the root node.
+        if self.composition_type == "product":
+            agg = pl.col('__per_node_results').list.all()
+        elif self.composition_type == "sum":
+            agg = pl.col('__per_node_results').list.any()
+        else:  # leaf
+            agg = pl.col(node_columns[0])
 
-        # We satisfy the condition for the composed map if we satisfy the condition for every sub map
+
         df = df.with_columns(__per_node_results=pl.concat_list(node_columns))
-        df = df.with_columns(
-            pl.col('__per_node_results').list.all()
-            .alias(
-                column_name_method(label))
-        )
+        df = df.with_columns(agg.alias(column_name_method(label)))
         df = df.drop('__per_node_results', *node_columns)
 
         return df
@@ -144,8 +150,8 @@ class _Pomap:
 
 class Pomap(_Pomap):
 
-    def __init__(self, name: str, reference_column: str):
-        super().__init__(nodes=[self], name=name, reference_column=reference_column)
+    def __init__(self, name: str):
+        super().__init__(nodes=[self], name=name, composition_type='leaf')
 
     @property
     def labels(self) -> pl.DataFrame:

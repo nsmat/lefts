@@ -5,13 +5,13 @@ from pomap.pomap import  Pomap
 class CategoricalPomap(Pomap):
 
     def __init__(self, column: str, labels: list):
-        super().__init__(name=f"Categorical {column}: {labels}", reference_column=column)
+        super().__init__(name=f"Categorical {column}: {labels}")
         self._column = column
         self._labels = labels
 
     @property
     def labels(self) -> pl.DataFrame:
-        return pl.Series(values=self._labels, name=self.reference_column).to_frame()
+        return pl.Series(values=self._labels).to_frame()
 
     def _label_rows_as(self, df: pl.DataFrame, label: dict, column_name: str) -> pl.DataFrame:
         df = df.with_columns(
