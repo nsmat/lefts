@@ -6,6 +6,7 @@ class RandomisedCrossValidationPoMap(Pomap):
 
     def __init__(self, num_folds: int, index_column: 'str'):
         super().__init__(reference_column=index_column, name=f'Randomised CV: {index_column}')
+        # TODO needs a 'labels' method
         self.num_folds = num_folds
         self.index_column = index_column
         self.fold_labels = [str(c) for c in range(num_folds)]
