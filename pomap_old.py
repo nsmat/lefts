@@ -57,11 +57,11 @@ class _Pomap:
 
     @staticmethod
     def _find_leaf_nodes(node):
-        if (len(node._nodes) == 1) and (node._nodes[0] is node):
+        if (len(node._children) == 1) and (node._children[0] is node):
             return [node]
 
         leaf_nodes = []
-        for child in node._nodes:
+        for child in node._children:
             leaf_nodes.extend(_Pomap._find_leaf_nodes(child))
 
         return leaf_nodes

@@ -11,7 +11,7 @@ class CategoricalPomap(Pomap):
 
     @property
     def labels(self) -> pl.DataFrame:
-        return pl.Series(values=self._labels).to_frame()
+        return pl.Series(values=self._labels, name=self._column).to_frame()
 
     def _label_rows_as(self, df: pl.DataFrame, label: dict, column_name: str) -> pl.DataFrame:
         df = df.with_columns(

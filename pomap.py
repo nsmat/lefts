@@ -18,13 +18,13 @@ class _Pomap:
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
     def __init__(self,
-                 nodes: list[Self],
+                 children: list[Self],
                  name: str,
                  composition_type: __COMPOSITION_TYPES
                  ):
 
         self.name = name
-        self._nodes = nodes
+        self._children = children
         self.composition_type = composition_type
 
         # Implement some standardised naming for the subclasses to use
@@ -34,8 +34,8 @@ class _Pomap:
 
 
     def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
-        product_name = product_name if product_name else f'{self.name} x {other.name}'
-        return _Pomap(nodes=[self, other],
+        product_name = product_name or f'{self.name} x {other.name}'
+        return _Pomap(children=[self, other],
                       name=product_name,
                       composition_type='product'
                       )
@@ -43,34 +43,27 @@ class _Pomap:
     def sum(self, other: "_Pomap", sum_name=None) -> "_Pomap":
         sum_name = sum_name or f"{self.name} + {other.name}"
         return _Pomap(
-            nodes=[self, other],
+            children=[self, other],
             name=sum_name,
             composition_type="sum"
         )
 
     @property
     def labels(self) -> pl.DataFrame:
-        leaf_nodes = self._find_leaf_nodes(self)
-        leaf_labels = [node.labels for node in leaf_nodes]
+        if self.composition_type == 'leaf':
+            return self.labels
 
-        if self.composition_type == "product":
+        elif self.composition_type == "product":
             # A product node should return the cross product of its children
-            return reduce(lambda left, right: left.join(right, how="cross"), leaf_labels)
+            child_labels = [child.labels for child in self._children]
+            return reduce(lambda left, right: left.join(right, how="cross"), child_labels)
+
         elif self.composition_type == "sum":
-            return pl.concat(leaf_labels)
-        else:  # If not a product, you are a leaf
-            return leaf_labels[0]
+            child_labels = [child.labels for child in self._children]
+            return pl.concat(child_labels, how='diagonal_relaxed')
 
-    @staticmethod
-    def _find_leaf_nodes(node):
-        if (len(node._nodes) == 1) and (node._nodes[0] is node):
-            return [node]
-
-        leaf_nodes = []
-        for child in node._nodes:
-            leaf_nodes.extend(_Pomap._find_leaf_nodes(child))
-
-        return leaf_nodes
+        else:
+            raise ValueError('Unknown composition type encountered')
 
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
@@ -93,7 +86,7 @@ class _Pomap:
         }[label_as]
 
         node_columns = []
-        for node in self._nodes:
+        for node in self._children:
             label_as_method_map = {
                 'train': node.label_rows_as_train,
                 'test': node.label_rows_as_test,
@@ -151,7 +144,7 @@ class _Pomap:
 class Pomap(_Pomap):
 
     def __init__(self, name: str):
-        super().__init__(nodes=[self], name=name, composition_type='leaf')
+        super().__init__(children=[self], name=name, composition_type='leaf')
 
     @property
     def labels(self) -> pl.DataFrame:
