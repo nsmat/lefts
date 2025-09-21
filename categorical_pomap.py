@@ -13,18 +13,11 @@ class CategoricalPomap(Pomap):
     def labels(self) -> pl.DataFrame:
         return pl.Series(values=self._labels, name=self._column).to_frame()
 
-    def _label_rows_as(self, df: pl.DataFrame, label: dict, column_name: str) -> pl.DataFrame:
-        df = df.with_columns(
-            (pl.col(self._column) == label[self._column]).alias(column_name)
-        )
+    def train_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
+        return pl.col(self._column) == label[self._column]
 
-        return df
+    def test_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
+        return pl.col(self._column) == label[self._column]
 
-    def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        return self._label_rows_as(df, label, self._train_column_name(label))
-
-    def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        return self._label_rows_as(df, label, self._test_column_name(label))
-
-    def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        return self._label_rows_as(df, label, self._validate_column_name(label))
+    def validate_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
+        return pl.col(self._column) == label[self._column]
