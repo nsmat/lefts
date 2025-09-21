@@ -30,8 +30,6 @@ class RandomisedCrossValidationPoMap(Pomap):
 
         return expr
 
-    def label_rows_as_train(self, df, label):
-        return ~self.train_label_expr(df, label)
 
 
 

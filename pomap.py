@@ -76,7 +76,7 @@ class _Pomap:
         df = self._label_rows_as(df, label, label_as='validate')
         return df
 
-    def _label_expr(self, label, label_as) -> pl.Expr:
+    def _label_expr(self, df: pl.DataFrame, label, label_as: __LABEL_TYPES) -> pl.Expr:
         """
         Generates an expression which will evaluate to True if a row is belongs to
         period <label_rows_as> for <label>
@@ -90,7 +90,7 @@ class _Pomap:
                 'validate': self.validate_label_expr
             }[label_as]
 
-            return leaf_label_method(label, label_as)
+            return leaf_label_method(df, label, label_as)
 
         elif self.composition_type == 'product':
             return pl.all_horizontal([child._label_expr(label, label_as) for child in self._children])
@@ -138,11 +138,11 @@ class Pomap(_Pomap):
     def labels(self) -> pl.DataFrame:
         raise NotImplementedError
 
-    def train_label_expr(self, df: pl.DataFrame, label) -> pl.Expr:
+    def train_label_expr(self, label, df: pl.DataFrame | None = None) -> pl.Expr:
         raise NotImplementedError
 
-    def test_label_expr(self, df: pl.DataFrame, label) -> pl.Expr:
+    def test_label_expr(self, label, df: pl.DataFrame | None = None) -> pl.Expr:
         raise NotImplementedError
 
-    def validate_label_expr(self, df: pl.DataFrame, label) -> pl.Expr:
+    def validate_label_expr(self, label, df: pl.DataFrame | None = None) -> pl.Expr:
         raise NotImplementedError
