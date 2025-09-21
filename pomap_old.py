@@ -79,42 +79,6 @@ class _Pomap:
         df = self._label_rows_as(df, label, label_as='validate')
         return df
 
-    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: str) -> pl.DataFrame:
-
-        column_name_method = {
-            'train': self._train_column_name,
-            'test': self._test_column_name,
-            'validate': self._validate_column_name
-        }[label_as]
-
-        node_columns = []
-        for node in self._nodes:
-            label_as_method_map = {
-                'train': node.label_rows_as_train,
-                'test': node.label_rows_as_test,
-                'validate': node.label_rows_as_validate
-            }
-
-            label_as_method = label_as_method_map[label_as]
-
-            # TODO here we need to add in some handling of the case where a
-            # label is 'incomplete' across the reference columns
-
-            node_sub_label = {node.reference_column: label[node.reference_column]}
-            df = label_as_method(df=df, label=node_sub_label)
-            node_columns.append(column_name_method(node_sub_label))
-
-        # We satisfy the condition for the composed map if we satisfy the condition for every sub map
-        df = df.with_columns(__per_node_results=pl.concat_list(node_columns))
-        df = df.with_columns(
-            pl.col('__per_node_results').list.all()
-            .alias(
-                column_name_method(label))
-        )
-        df = df.drop('__per_node_results', *node_columns)
-
-        return df
-
     def _label_to(self, df: pl.DataFrame, label: dict, label_to: str) -> pl.DataFrame:
         funcs = {
             'train': (self.label_rows_as_train, self._train_column_name),
