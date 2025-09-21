@@ -139,7 +139,7 @@ class _Pomap:
 class Pomap(_Pomap):
 
     def __init__(self, name: str):
-        super().__init__(children=[self], name=name, composition_type='leaf')
+        super().__init__(children=[], name=name, composition_type='leaf')
 
     @property
     def labels(self) -> pl.DataFrame:
