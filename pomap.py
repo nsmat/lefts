@@ -90,12 +90,12 @@ class _Pomap:
                 'validate': self.validate_label_expr
             }[label_as]
 
-            return leaf_label_method(df, label, label_as)
+            return leaf_label_method(df, label)
 
         elif self.composition_type == 'product':
-            return pl.all_horizontal([child._label_expr(label, label_as) for child in self._children])
+            return pl.all_horizontal([child._label_expr(df, label, label_as) for child in self._children])
         elif self.composition_type == 'sum':
-            return pl.any_horizontal([child._label_expr(label, label_as) for child in self._children])
+            return pl.any_horizontal([child._label_expr(df, label, label_as) for child in self._children])
         else:
             raise ValueError(f'Unknown composition type {self.composition_type} encountered')
 
@@ -106,7 +106,7 @@ class _Pomap:
                             }[label_as]
         column_name = column_name_func(label)
 
-        expr = self._label_expr(label, label_as)
+        expr = self._label_expr(df, label, label_as)
         return df.with_columns(expr.alias(column_name))
 
     # # #  Interface used to slice data during model training

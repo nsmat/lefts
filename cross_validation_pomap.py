@@ -4,6 +4,7 @@ from random import choice
 
 class RandomisedCrossValidationPoMap(Pomap):
 
+    # TODO swap this for a stable randomised mapping function - just use md5 hash and modulo.
     def __init__(self, num_folds: int, index_column: 'str'):
         super().__init__(name=f'Randomised CV: {index_column}')
         self.num_folds = num_folds
