@@ -109,7 +109,7 @@ class _Pomap:
         expr = self._label_expr(label, label_as)
         return df.with_columns(expr.alias(column_name))
 
-    def _label_to(self, df: pl.DataFrame, label: dict, label_to: str) -> pl.DataFrame:
+    def _label_to(self, df: pl.DataFrame, label: dict, label_to: __LABEL_TYPES) -> pl.DataFrame:
         funcs = {
             'train': (self.label_rows_as_train, self._train_column_name),
             'test': (self.label_rows_as_test, self._test_column_name),
@@ -123,15 +123,15 @@ class _Pomap:
         return df
 
     # # #  Interface used to slice data during model training
-    def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def label_to_train(self, df: pl.DataFrame, label) -> pl.DataFrame:
         df = self._label_to(df, label, 'train')
         return df
 
-    def label_to_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def label_to_test(self, df: pl.DataFrame, label) -> pl.DataFrame:
         df = self._label_to(df, label, 'test')
         return df
 
-    def label_to_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def label_to_validate(self, df: pl.DataFrame, label) -> pl.DataFrame:
         df = self._label_to(df, label, 'validate')
         return df
 
