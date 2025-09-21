@@ -110,6 +110,9 @@ class _Pomap:
         return df.with_columns(expr.alias(column_name))
 
     # # #  Interface used to slice data during model training
+    # # # Each function takes a label, and filters down to
+    # # # The subset of the data that matches the train/test/validate
+    # # # Condition for that label.
     def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self.label_rows_as_train(df, label)
         col = self._train_column_name(label)
