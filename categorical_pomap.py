@@ -1,5 +1,5 @@
 import polars as pl
-from pomap.pomap import  Pomap
+from pomap.pomap import Pomap
 
 
 class CategoricalPomap(Pomap):
@@ -13,11 +13,11 @@ class CategoricalPomap(Pomap):
     def labels(self) -> pl.DataFrame:
         return pl.Series(values=self._labels, name=self._column).to_frame()
 
-    def train_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
-        return pl.col(self._column) == label[self._column]
+    def train_label_expr(self, df: pl.DataFrame, label) -> pl.Expr:
+        return pl.col(self._column) == label
 
-    def test_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
-        return pl.col(self._column) == label[self._column]
+    def test_label_expr(self, df: pl.DataFrame, label) -> pl.Expr:
+        return pl.col(self._column) == label
 
-    def validate_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
-        return pl.col(self._column) == label[self._column]
+    def validate_label_expr(self, df: pl.DataFrame, label) -> pl.Expr:
+        return pl.col(self._column) == label
