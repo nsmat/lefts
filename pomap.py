@@ -109,31 +109,21 @@ class _Pomap:
         expr = self._label_expr(label, label_as)
         return df.with_columns(expr.alias(column_name))
 
-    def _label_to(self, df: pl.DataFrame, label: dict, label_to: __LABEL_TYPES) -> pl.DataFrame:
-        funcs = {
-            'train': (self.label_rows_as_train, self._train_column_name),
-            'test': (self.label_rows_as_test, self._test_column_name),
-            'validate': (self.label_rows_as_validate, self._validate_column_name),
-        }
-
-        label_func, column_name_func = funcs[label_to]
-        df = label_func(df, label)
-        df = df.filter(column_name_func(label)).drop(column_name_func(label))
-
-        return df
-
     # # #  Interface used to slice data during model training
-    def label_to_train(self, df: pl.DataFrame, label) -> pl.DataFrame:
-        df = self._label_to(df, label, 'train')
-        return df
+    def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self.label_rows_as_train(df, label)
+        col = self._train_column_name(label)
+        return df.filter(col).drop(col)
 
-    def label_to_test(self, df: pl.DataFrame, label) -> pl.DataFrame:
-        df = self._label_to(df, label, 'test')
-        return df
+    def label_to_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self.label_rows_as_test(df, label)
+        col = self._test_column_name(label)
+        return df.filter(col).drop(col)
 
-    def label_to_validate(self, df: pl.DataFrame, label) -> pl.DataFrame:
-        df = self._label_to(df, label, 'validate')
-        return df
+    def label_to_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+        df = self.label_rows_as_validate(df, label)
+        col = self._validate_column_name(label)
+        return df.filter(col).drop(col)
 
 
 class Pomap(_Pomap):
