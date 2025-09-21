@@ -48,18 +48,17 @@ class _Pomap:
             composition_type="sum"
         )
 
-    @property
-    def labels(self) -> pl.DataFrame:
+    def view_labels(self) -> pl.DataFrame:
         if self.composition_type == 'leaf':
             return self.labels
 
         elif self.composition_type == "product":
             # A product node should return the cross product of its children
-            child_labels = [child.labels for child in self._children]
+            child_labels = [child.view_labels() for child in self._children]
             return reduce(lambda left, right: left.join(right, how="cross"), child_labels)
 
         elif self.composition_type == "sum":
-            child_labels = [child.labels for child in self._children]
+            child_labels = [child.view_labels() for child in self._children]
             return pl.concat(child_labels, how='diagonal_relaxed')
 
         else:
@@ -86,9 +85,9 @@ class _Pomap:
         if self.composition_type == 'leaf':
 
             leaf_label_method = {
-                'train': self.label_rows_as_train,
-                'test': self.label_rows_as_test,
-                'validate': self.label_rows_as_validate
+                'train': self.train_label_expr,
+                'test': self.test_label_expr,
+                'validate': self.validate_label_expr
             }[label_as]
 
             return leaf_label_method(label, label_as)
@@ -102,9 +101,9 @@ class _Pomap:
 
     def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: __LABEL_TYPES) -> pl.DataFrame:
         column_name_func = {'train': self._train_column_name,
-                       'test': self._test_column_name,
-                       'validate': self._validate_column_name,
-                       }[label_as]
+                            'test': self._test_column_name,
+                            'validate': self._validate_column_name,
+                            }[label_as]
         column_name = column_name_func(label)
 
         expr = self._label_expr(label, label_as)
@@ -123,7 +122,7 @@ class _Pomap:
 
         return df
 
-    #### Model Interface
+    # # #  Interface used to slice data during model training
     def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_to(df, label, 'train')
         return df
@@ -146,17 +145,11 @@ class Pomap(_Pomap):
     def labels(self) -> pl.DataFrame:
         raise NotImplementedError
 
-    # These three (train, test, validate) functions define the behaviour of the PoMap.
-    # E.g, is it a cross validation, is it categorical, etc.
-    # See below for an example of a reasonably complex example.
-    def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def train_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
         raise NotImplementedError
 
-    # There has to be a separate one for test and validation, because
-    # train and test data must be distinct.
-    def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def test_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
         raise NotImplementedError
 
-    # .... as above
-    def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def validate_label_expr(self, df: pl.DataFrame, label: dict) -> pl.Expr:
         raise NotImplementedError

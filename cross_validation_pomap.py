@@ -1,11 +1,11 @@
-from pomap import Pomap
+from pomap.pomap import Pomap
 import polars as pl
 from random import choice
 
 class RandomisedCrossValidationPoMap(Pomap):
 
     def __init__(self, num_folds: int, index_column: 'str'):
-        super().__init__(reference_column=index_column, name=f'Randomised CV: {index_column}')
+        super().__init__(name=f'Randomised CV: {index_column}')
         # TODO needs a 'labels' method
         self.num_folds = num_folds
         self.index_column = index_column
