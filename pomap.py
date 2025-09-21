@@ -128,7 +128,7 @@ class _Pomap:
         return df
 
     def label_to_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_to(df, label, 'train')
+        df = self._label_to(df, label, 'test')
         return df
 
     def label_to_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
