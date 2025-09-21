@@ -14,7 +14,8 @@ class LabelKey:
 
 
 class _Pomap:
-    __COMPOSITION_TYPES = Literal["leaf", "product", "sum"]
+    __COMPOSITION_TYPES = Literal['leaf', 'product', 'sum']
+    __LABEL_TYPES = Literal['train', 'test', 'validate']
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
     def __init__(self,
@@ -31,7 +32,6 @@ class _Pomap:
         self._train_column_name = lambda label: f'train({label})'
         self._test_column_name = lambda label: f'test({label})'
         self._validate_column_name = lambda label: f'validate({label})'
-
 
     def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
         product_name = product_name or f'{self.name} x {other.name}'
@@ -63,7 +63,7 @@ class _Pomap:
             return pl.concat(child_labels, how='diagonal_relaxed')
 
         else:
-            raise ValueError('Unknown composition type encountered')
+            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
 
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
@@ -77,42 +77,38 @@ class _Pomap:
         df = self._label_rows_as(df, label, label_as='validate')
         return df
 
-    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: str) -> pl.DataFrame:
+    def _label_expr(self, label, label_as) -> pl.Expr:
+        """
+        Generates an expression which will evaluate to True if a row is belongs to
+        period <label_rows_as> for <label>
+        """
 
-        column_name_method = {
-            'train': self._train_column_name,
-            'test': self._test_column_name,
-            'validate': self._validate_column_name
-        }[label_as]
+        if self.composition_type == 'leaf':
 
-        node_columns = []
-        for node in self._children:
-            label_as_method_map = {
-                'train': node.label_rows_as_train,
-                'test': node.label_rows_as_test,
-                'validate': node.label_rows_as_validate
-            }
+            leaf_label_method = {
+                'train': self.label_rows_as_train,
+                'test': self.label_rows_as_test,
+                'validate': self.label_rows_as_validate
+            }[label_as]
 
-            label_as_method = label_as_method_map[label_as]
+            return leaf_label_method(label, label_as)
 
-            df = label_as_method(df=df, label=label)
-            node_columns.append(column_name_method(label))
+        elif self.composition_type == 'product':
+            return pl.all_horizontal([child._label_expr(label, label_as) for child in self._children])
+        elif self.composition_type == 'sum':
+            return pl.any_horizontal([child._label_expr(label, label_as) for child in self._children])
+        else:
+            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
 
-        # We evaluate the match to a label differently depending on the
-        # composition type of the root node.
-        if self.composition_type == "product":
-            agg = pl.col('__per_node_results').list.all()
-        elif self.composition_type == "sum":
-            agg = pl.col('__per_node_results').list.any()
-        else:  # leaf
-            agg = pl.col(node_columns[0])
+    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: __LABEL_TYPES) -> pl.DataFrame:
+        column_name_func = {'train': self._train_column_name,
+                       'test': self._test_column_name,
+                       'validate': self._validate_column_name,
+                       }[label_as]
+        column_name = column_name_func(label)
 
-
-        df = df.with_columns(__per_node_results=pl.concat_list(node_columns))
-        df = df.with_columns(agg.alias(column_name_method(label)))
-        df = df.drop('__per_node_results', *node_columns)
-
-        return df
+        expr = self._label_expr(label, label_as)
+        return df.with_columns(expr.alias(column_name))
 
     def _label_to(self, df: pl.DataFrame, label: dict, label_to: str) -> pl.DataFrame:
         funcs = {
