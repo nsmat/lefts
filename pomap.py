@@ -138,11 +138,11 @@ class Pomap(_Pomap):
     def labels(self) -> pl.DataFrame:
         raise NotImplementedError
 
-    def train_label_expr(self, label, df: pl.DataFrame | None = None) -> pl.Expr:
+    def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
 
-    def test_label_expr(self, label, df: pl.DataFrame | None = None) -> pl.Expr:
+    def test_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
 
-    def validate_label_expr(self, label, df: pl.DataFrame | None = None) -> pl.Expr:
+    def validate_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
