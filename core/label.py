@@ -4,13 +4,13 @@ from typing import Dict, Any, Tuple, List, Optional
 
 @dataclass(frozen=True)
 class Label:
+    """Immutable, hashable, order invariant representation
+    of a PoMap label.
     """
-    Immutable, hashable label that stores a mapping:
-      { pomap_name: { leaf_field: value, ... }, ... }
 
-    Internal representation is canonicalized to make equality/hash stable.
-    """
-    _mapping: Tuple[Tuple[str, Tuple[Tuple[str, Any], ...]], ...]  # ((pomap, ((k,v),...)), ...)
+    # Labels are stored as:
+    #   ((pomap_name, ((k,v),...)), ...)
+    _mapping: Tuple[Tuple[str, Tuple[Tuple[str, Any], ...]], ...]
 
     @staticmethod
     def from_dict(mapping: Dict[str, Dict[str, Any]]) -> "Label":
