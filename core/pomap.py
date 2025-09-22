@@ -1,16 +1,8 @@
 import polars as pl
 from typing import Self, Literal
-from functools import reduce
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class LabelKey:
-    pomap_name: str
-    label: dict
-
-    def __repr__(self):
-        return f"{self.pomap_name}:{self.label}"
+from pomap.core.label import Label
+from typing import List
+import itertools
 
 
 class _Pomap:
@@ -48,21 +40,80 @@ class _Pomap:
             composition_type="sum"
         )
 
+    def _collect_labels(self) -> List[Label]:
+        """
+        Recursively build the list of Label objects that index the composed Pomap.
+        - leaf: return Labels with single entry { self.name: row_dict }
+        - product: cartesian product of child labels, merged
+        - sum: union (concatenate) of child labels
+        """
+        # Leaf case: turn each row of self.labels (a DataFrame) into a Label
+        if self.composition_type == "leaf":
+            df = self.labels  # leaf class must implement .labels DataFrame
+            labels = []
+            for row in df.iter_rows(named=True):
+                labels.append(Label.from_dict({self.name: row}))
+            return labels
+
+        # Product: cartesian product of children
+        if self.composition_type == "product":
+            child_lists = [child._collect_labels() for child in self._children]
+
+            result = []
+            for combo in itertools.product(*child_lists):
+                merged = combo[0]
+                for lbl in combo[1:]:
+                    merged = merged.merged_with(lbl)
+                result.append(merged)
+            return result
+
+        # Sum: concatenate child label lists (no merging)
+        if self.composition_type == "sum":
+            result = []
+            for child in self._children:
+                result.extend(child._collect_labels())
+            # optionally deduplicate
+            # result = list(dict.fromkeys(result))  # preserves order (if Label is hashable)
+            # better: keep unique by set to remove duplicates
+            seen = {}
+            unique = []
+            for lbl in result:
+                if lbl not in seen:
+                    seen[lbl] = True
+                    unique.append(lbl)
+            return unique
+
+        raise ValueError(f"Unknown composition type {self.composition_type}")
+
+    def labels_list(self) -> List[Label]:
+        """Public accessor returning the list of Labels for this pomap composition."""
+        return self._collect_labels()
+
     def view_labels(self) -> pl.DataFrame:
-        if self.composition_type == 'leaf':
-            return self.labels
+        """
+        Produce a Polars DataFrame view of the composed Labels.
+        Column names are namespaced as '<pomap_name>__<field>' to avoid collisions.
+        Missing fields are filled with None (Polars will produce nulls).
+        """
+        labels = self._collect_labels()
+        rows = []
+        columns_set = set()
+        for lbl in labels:
+            d = {}
+            mapping = lbl.to_dict()
+            for pomap_name, sub in mapping.items():
+                for k, v in sub.items():
+                    colname = f"{pomap_name}__{k}"
+                    d[colname] = v
+                    columns_set.add(colname)
+            rows.append(d)
 
-        elif self.composition_type == "product":
-            # A product node should return the cross product of its children
-            child_labels = [child.view_labels() for child in self._children]
-            return reduce(lambda left, right: left.join(right, how="cross"), child_labels)
+        if not rows:
+            return pl.DataFrame([])
 
-        elif self.composition_type == "sum":
-            child_labels = [child.view_labels() for child in self._children]
-            return pl.concat(child_labels, how='diagonal_relaxed')
-
-        else:
-            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
+        cols = sorted(columns_set)
+        normalized_rows = [{c: r.get(c, None) for c in cols} for r in rows]
+        return pl.DataFrame(normalized_rows)
 
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
