@@ -9,10 +9,6 @@ class CategoricalPomap(Pomap):
         self._column = column
         self._labels = labels
 
-    @property
-    def labels(self) -> pl.DataFrame:
-        return pl.Series(values=self._labels, name=self._column).to_frame()
-
     def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         return pl.col(self._column) == label
 

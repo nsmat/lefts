@@ -1,61 +1,39 @@
-from dataclasses import dataclass
-from typing import Dict, Any, Tuple, List, Optional
+from immutables import Map as FrozenDict
+from typing import Any, Dict
 
 
-@dataclass(frozen=True)
 class Label:
-    """Immutable, hashable, order invariant representation
-    of a PoMap label.
-    """
-
-    # Labels are stored as:
-    #   ((pomap_name, ((k,v),...)), ...)
-    _mapping: Tuple[Tuple[str, Tuple[Tuple[str, Any], ...]], ...]
-
-    @staticmethod
-    def from_dict(mapping: Dict[str, Dict[str, Any]]) -> "Label":
-        items: List[Tuple[str, Tuple[Tuple[str, Any], ...]]] = []
-        for pomap_name in sorted(mapping.keys()):
-            lbl = mapping[pomap_name] or {}
-            lbl_items = tuple(sorted(lbl.items()))
-            items.append((pomap_name, lbl_items))
-        return Label(tuple(items))
-
-    def to_dict(self) -> Dict[str, Dict[str, Any]]:
-        return {pomap: dict(tuples) for pomap, tuples in self._mapping}
-
-    def for_pomap(self, pomap_name: str) -> Optional[Dict[str, Any]]:
-        for p, tuples in self._mapping:
-            if p == pomap_name:
-                return dict(tuples)
-        return None
-
-    def merged_with(self, other: "Label") -> "Label":
-        a = self.to_dict()
-        b = other.to_dict()
-        intersect = set(a).intersection(b)
-        if intersect:
-            raise ValueError(f"Cannot merge Labels: overlapping pomap names {intersect}")
-        merged = {**a, **b}
-        return Label.from_dict(merged)
-
-    def matches_partial(self, partial: dict[str, dict]) -> bool:
+    def __init__(self, mapping: Dict[str, Any]):
         """
-        Return True if this label contains at least all (pomap, subdict)
-        pairs specified in `partial`.
-        Example partial = {"p1": {"val": "a"}}
+        mapping: leaf PoMap name -> label value (single column per leaf)
         """
-        for pname, subdict in partial.items():
-            # If the pomap isn't in this label, fail
-            if pname not in dict(self._mapping):
+        # store as immutable frozen dict
+        self._mapping: FrozenDict = FrozenDict(mapping)
+        # canonical form for hashing / equality: sorted tuple of items
+        self._canonical = tuple(sorted(self._mapping.items()))
+
+    def __hash__(self):
+        return hash(self._canonical)
+
+    def __eq__(self, other):
+        return isinstance(other, Label) and self._canonical == other._canonical
+
+    def __getitem__(self, pomap_name: str):
+        return self._mapping[pomap_name]
+
+    def __contains__(self, pomap_name: str):
+        return pomap_name in self._mapping
+
+    def as_dict(self) -> Dict[str, Any]:
+        """Return a regular dict copy."""
+        return dict(self._mapping)
+
+    def matches_partial(self, partial: Dict[str, Any]) -> bool:
+        """Return True if all specified leaf labels match."""
+        for pomap_name, value in partial.items():
+            if pomap_name not in self._mapping or self._mapping[pomap_name] != value:
                 return False
-            # Check all k/v pairs in subdict
-            this_dict = dict(dict(self._mapping)[pname])
-            for k, v in subdict.items():
-                if this_dict.get(k) != v:
-                    return False
         return True
 
     def __repr__(self):
-        return f"Label({self.to_dict()})"
-
+        return f"Label({self.as_dict()})"

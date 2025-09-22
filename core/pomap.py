@@ -1,7 +1,7 @@
 import polars as pl
 from typing import Self, Literal
 from pomap.core.label import Label
-from typing import List
+from typing import Iterable
 import itertools
 
 
@@ -40,35 +40,36 @@ class _Pomap:
             composition_type="sum"
         )
 
-    def _collect_labels(self) -> List[Label]:
+    def _collect_labels(self) -> list["Label"]:
         """
-        Recursively build the list of Label objects that index the composed Pomap.
-        - leaf: return Labels with single entry { self.name: row_dict }
-        - product: cartesian product of child labels, merged
-        - sum: union (concatenate) of child labels
+        Recursively collect all Labels for this PoMap composition.
+        Returns a list of Label objects (immutable, hashable).
         """
-        # Leaf case: turn each row of self.labels (a DataFrame) into a Label
-        if self.composition_type == "leaf":
-            df = self.labels  # leaf class must implement .labels DataFrame
-            labels = []
-            for row in df.iter_rows(named=True):
-                labels.append(Label.from_dict({self.name: row}))
-            return labels
 
-        # Product: cartesian product of children
-        if self.composition_type == "product":
-            child_lists = [child._collect_labels() for child in self._children]
+        if self.composition_type == "leaf":
+            return [Label({self.name: val}) for val in self._labels]
+
+        # Resulting labels are cartesian product of children
+        elif self.composition_type == "product":
+            child_labels_lists = [child._collect_labels() for child in self._children]
 
             result = []
-            for combo in itertools.product(*child_lists):
-                merged = combo[0]
-                for lbl in combo[1:]:
-                    merged = merged.merged_with(lbl)
-                result.append(merged)
+            for combination in itertools.product(*child_labels_lists):
+                merged_mapping = {}
+                for label in combination:
+                    overlap = set(label.as_dict().keys()) & set(merged_mapping.keys())
+                    if overlap:
+                        raise ValueError(
+                            f"Namespace collision in product: PoMap(s) {overlap} "
+                            f"appear in multiple children"
+                        )
+                    merged_mapping.update(label.as_dict())
+                result.append(Label(merged_mapping))
+
             return result
 
-        # Sum: disjoint union of children
-        if self.composition_type == "sum":
+        # Resulting labels are disjoint union of children labels
+        elif self.composition_type == "sum":
             result = []
             seen = set()
             for child in self._children:
@@ -77,39 +78,12 @@ class _Pomap:
                         raise ValueError(f"Label collision in sum composition: {label}")
                     seen.add(label)
                     result.append(label)
+
+
             return result
 
-        raise ValueError(f"Unknown composition type {self.composition_type}")
-
-    def labels_list(self) -> List[Label]:
-        """Public accessor returning the list of Labels for this pomap composition."""
-        return self._collect_labels()
-
-    def view_labels(self) -> pl.DataFrame:
-        """
-        Produce a Polars DataFrame view of the composed Labels.
-        Column names are namespaced as '<pomap_name>__<field>' to avoid collisions.
-        Missing fields are filled with None (Polars will produce nulls).
-        """
-        labels = self._collect_labels()
-        rows = []
-        columns_set = set()
-        for lbl in labels:
-            d = {}
-            mapping = lbl.to_dict()
-            for pomap_name, sub in mapping.items():
-                for k, v in sub.items():
-                    colname = f"{pomap_name}__{k}"
-                    d[colname] = v
-                    columns_set.add(colname)
-            rows.append(d)
-
-        if not rows:
-            return pl.DataFrame([])
-
-        cols = sorted(columns_set)
-        normalized_rows = [{c: r.get(c, None) for c in cols} for r in rows]
-        return pl.DataFrame(normalized_rows)
+        else:
+            raise ValueError(f"Unknown composition_type: {self.composition_type}")
 
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
@@ -178,12 +152,10 @@ class _Pomap:
 
 class Pomap(_Pomap):
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, labels: Iterable):
         super().__init__(children=[], name=name, composition_type='leaf')
+        self.labels = labels
 
-    @property
-    def labels(self) -> pl.DataFrame:
-        raise NotImplementedError
 
     def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
