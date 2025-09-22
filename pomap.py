@@ -1,72 +1,69 @@
 import polars as pl
-from typing import Self, Optional
+from typing import Self, Literal
 from functools import reduce
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class LabelKey:
+    pomap_name: str
+    label: dict
+
+    def __repr__(self):
+        return f"{self.pomap_name}:{self.label}"
 
 
 class _Pomap:
+    __COMPOSITION_TYPES = Literal['leaf', 'product', 'sum']
+    __LABEL_TYPES = Literal['train', 'test', 'validate']
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
-    def __init__(self, nodes: list[Self], name: str, reference_column: Optional[str]):
+    def __init__(self,
+                 children: list[Self],
+                 name: str,
+                 composition_type: __COMPOSITION_TYPES
+                 ):
 
         self.name = name
-        self._nodes = nodes
-        self.reference_column = reference_column
+        self._children = children
+        self.composition_type = composition_type
 
         # Implement some standardised naming for the subclasses to use
         self._train_column_name = lambda label: f'train({label})'
         self._test_column_name = lambda label: f'test({label})'
         self._validate_column_name = lambda label: f'validate({label})'
 
-    def __repr__(self):
-        return self.name
-
-    def __getitem__(self, arg: str):
-        for node in self._nodes:
-            if node.name == 'arg':
-                return node
-        raise ValueError(f'PoMap has no node {arg}')
-
-    # -=-=-=-=-=-=-=--=-=-==-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-=-=-=-=-=-=--=-
-    #   After this, things get interesting, since we start to deal with how the pomap actually behaves
     def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
-
-        # Reference columns or names?
-        self_reference_columns = {n.reference_column for n in self._nodes}
-        other_reference_columns = {n.reference_column for n in other._nodes}
-
-        overlapping_reference_columns = self_reference_columns.intersection(other_reference_columns)
-        assert overlapping_reference_columns == set(), f"Cannot compose two Pomaps with overlapping reference_columns. Found {overlapping_reference_columns} in common"
-
-        # This composition assumes that ONLY the product operation is possible, not the sum.
-        product_name = product_name if product_name else f'{self.name} x {other.name}'
-        return _Pomap(nodes=self._nodes + other._nodes,
+        product_name = product_name or f'{self.name} x {other.name}'
+        return _Pomap(children=[self, other],
                       name=product_name,
-                      reference_column=None
+                      composition_type='product'
                       )
 
-    @property
-    def labels(self) -> pl.DataFrame:
-        # TODO this is currently overkill, because our 'tree' is just a path.
-        # However, it will be necessary if we add a product operation
-        leaf_nodes = self._find_leaf_nodes(self)
-        leaf_labels = [node.labels for node in leaf_nodes]
+    def sum(self, other: "_Pomap", sum_name=None) -> "_Pomap":
+        sum_name = sum_name or f"{self.name} + {other.name}"
+        return _Pomap(
+            children=[self, other],
+            name=sum_name,
+            composition_type="sum"
+        )
 
-        df = reduce(lambda left, right: left.join(right, how='cross'), leaf_labels)
+    def view_labels(self) -> pl.DataFrame:
+        if self.composition_type == 'leaf':
+            return self.labels
 
-        return df
+        elif self.composition_type == "product":
+            # A product node should return the cross product of its children
+            child_labels = [child.view_labels() for child in self._children]
+            return reduce(lambda left, right: left.join(right, how="cross"), child_labels)
 
-    @staticmethod
-    def _find_leaf_nodes(node):
-        if (len(node._nodes) == 1) and (node._nodes[0] is node):
-            return [node]
+        elif self.composition_type == "sum":
+            child_labels = [child.view_labels() for child in self._children]
+            return pl.concat(child_labels, how='diagonal_relaxed')
 
-        leaf_nodes = []
-        for child in node._nodes:
-            leaf_nodes.extend(_Pomap._find_leaf_nodes(child))
+        else:
+            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
 
-        return leaf_nodes
-
-    # Need to implement these in terms of the composed logic
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
         return df
@@ -79,89 +76,73 @@ class _Pomap:
         df = self._label_rows_as(df, label, label_as='validate')
         return df
 
-    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: str) -> pl.DataFrame:
+    def _label_expr(self, df: pl.DataFrame, label, label_as: __LABEL_TYPES) -> pl.Expr:
+        """
+        Generates an expression which will evaluate to True if a row is belongs to
+        period <label_rows_as> for <label>
+        """
 
-        column_name_method = {
-            'train': self._train_column_name,
-            'test': self._test_column_name,
-            'validate': self._validate_column_name
-        }[label_as]
+        if self.composition_type == 'leaf':
 
-        node_columns = []
-        for node in self._nodes:
-            label_as_method_map = {
-                'train': node.label_rows_as_train,
-                'test': node.label_rows_as_test,
-                'validate': node.label_rows_as_validate
-            }
+            leaf_label_method = {
+                'train': self.train_label_expr,
+                'test': self.test_label_expr,
+                'validate': self.validate_label_expr
+            }[label_as]
 
-            label_as_method = label_as_method_map[label_as]
+            return leaf_label_method(label, df)
 
-            # TODO here we need to add in some handling of the case where a
-            # label is 'incomplete' across the reference columns
+        elif self.composition_type == 'product':
+            return pl.all_horizontal([child._label_expr(df, label, label_as) for child in self._children])
+        elif self.composition_type == 'sum':
+            return pl.any_horizontal([child._label_expr(df, label, label_as) for child in self._children])
+        else:
+            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
 
-            node_sub_label = {node.reference_column: label[node.reference_column]}
-            df = label_as_method(df=df, label=node_sub_label)
-            node_columns.append(column_name_method(node_sub_label))
+    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: __LABEL_TYPES) -> pl.DataFrame:
+        column_name_func = {'train': self._train_column_name,
+                            'test': self._test_column_name,
+                            'validate': self._validate_column_name,
+                            }[label_as]
+        column_name = column_name_func(label)
 
-        # We satisfy the condition for the composed map if we satisfy the condition for every sub map
-        df = df.with_columns(__per_node_results=pl.concat_list(node_columns))
-        df = df.with_columns(
-            pl.col('__per_node_results').list.all()
-            .alias(
-                column_name_method(label))
-        )
-        df = df.drop('__per_node_results', *node_columns)
+        expr = self._label_expr(df, label, label_as)
+        return df.with_columns(expr.alias(column_name))
 
-        return df
-
-    def _label_to(self, df: pl.DataFrame, label: dict, label_to: str) -> pl.DataFrame:
-        funcs = {
-            'train': (self.label_rows_as_train, self._train_column_name),
-            'test': (self.label_rows_as_test, self._test_column_name),
-            'validate': (self.label_rows_as_validate, self._validate_column_name),
-        }
-
-        label_func, column_name_func = funcs[label_to]
-        df = label_func(df, label)
-        df = df.filter(column_name_func(label)).drop(column_name_func(label))
-
-        return df
-
-    #### Model Interface
+    # # #  Interface used to slice data during model training
+    # # # Each function takes a label, and filters down to
+    # # # The subset of the data that matches the train/test/validate
+    # # # Condition for that label.
     def label_to_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_to(df, label, 'train')
-        return df
+        df = self.label_rows_as_train(df, label)
+        col = self._train_column_name(label)
+        return df.filter(col).drop(col)
 
     def label_to_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_to(df, label, 'train')
-        return df
+        df = self.label_rows_as_test(df, label)
+        col = self._test_column_name(label)
+        return df.filter(col).drop(col)
 
     def label_to_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_to(df, label, 'validate')
-        return df
+        df = self.label_rows_as_validate(df, label)
+        col = self._validate_column_name(label)
+        return df.filter(col).drop(col)
 
 
 class Pomap(_Pomap):
 
-    def __init__(self, name: str, reference_column: str):
-        super().__init__(nodes=[self], name=name, reference_column=reference_column)
+    def __init__(self, name: str):
+        super().__init__(children=[], name=name, composition_type='leaf')
 
     @property
     def labels(self) -> pl.DataFrame:
         raise NotImplementedError
 
-    # These three (train, test, validate) functions define the behaviour of the PoMap.
-    # E.g, is it a cross validation, is it categorical, etc.
-    # See below for an example of a reasonably complex example.
-    def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
 
-    # There has to be a separate one for test and validation, because
-    # train and test data must be distinct.
-    def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def test_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
 
-    # .... as above
-    def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
+    def validate_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
