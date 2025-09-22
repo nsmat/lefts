@@ -90,7 +90,7 @@ class _Pomap:
                 'validate': self.validate_label_expr
             }[label_as]
 
-            return leaf_label_method(df, label)
+            return leaf_label_method(label, df)
 
         elif self.composition_type == 'product':
             return pl.all_horizontal([child._label_expr(df, label, label_as) for child in self._children])
