@@ -67,21 +67,17 @@ class _Pomap:
                 result.append(merged)
             return result
 
-        # Sum: concatenate child label lists (no merging)
+        # Sum: disjoint union of children
         if self.composition_type == "sum":
             result = []
+            seen = set()
             for child in self._children:
-                result.extend(child._collect_labels())
-            # optionally deduplicate
-            # result = list(dict.fromkeys(result))  # preserves order (if Label is hashable)
-            # better: keep unique by set to remove duplicates
-            seen = {}
-            unique = []
-            for lbl in result:
-                if lbl not in seen:
-                    seen[lbl] = True
-                    unique.append(lbl)
-            return unique
+                for label in child._collect_labels():
+                    if label in seen:
+                        raise ValueError(f"Label collision in sum composition: {label}")
+                    seen.add(label)
+                    result.append(label)
+            return result
 
         raise ValueError(f"Unknown composition type {self.composition_type}")
 
