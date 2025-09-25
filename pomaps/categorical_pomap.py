@@ -5,9 +5,8 @@ from pomap.core.pomap import Pomap
 class CategoricalPomap(Pomap):
 
     def __init__(self, column: str, labels: list):
-        super().__init__(name=f"Categorical {column}: {labels}")
+        super().__init__(name=f"Categorical {column}: {labels}", labels=labels)
         self._column = column
-        self._labels = labels
 
     def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         return pl.col(self._column) == label

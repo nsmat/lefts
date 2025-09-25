@@ -40,6 +40,11 @@ class _Pomap:
             composition_type="sum"
         )
 
+    def view_labels(self) -> pl.DataFrame:
+        labels = self._collect_labels()
+        label_df = pl.from_dicts([label.as_dict() for label in labels])
+        return label_df.select(*sorted(label_df.columns))
+
     def _collect_labels(self) -> list["Label"]:
         """
         Recursively collect all Labels for this PoMap composition.
@@ -47,7 +52,7 @@ class _Pomap:
         """
 
         if self.composition_type == "leaf":
-            return [Label({self.name: val}) for val in self._labels]
+            return [Label({self.name: val}) for val in self._leaf_labels]
 
         # Resulting labels are cartesian product of children
         elif self.composition_type == "product":
@@ -78,7 +83,6 @@ class _Pomap:
                         raise ValueError(f"Label collision in sum composition: {label}")
                     seen.add(label)
                     result.append(label)
-
 
             return result
 
@@ -154,8 +158,11 @@ class Pomap(_Pomap):
 
     def __init__(self, name: str, labels: Iterable):
         super().__init__(children=[], name=name, composition_type='leaf')
-        self.labels = labels
+        self._leaf_labels = labels
 
+    @property
+    def labels(self) -> list["Label"]:
+        return [Label({self.name: v}) for v in self._leaf_labels]
 
     def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
