@@ -7,9 +7,9 @@ class Label:
         """
         mapping: leaf PoMap name -> label value (single column per leaf)
         """
-        # store as immutable frozen dict
         self._mapping: FrozenDict = FrozenDict(mapping)
-        # canonical form for hashing / equality: sorted tuple of items
+
+        # canonical form for hashing / equality
         self._canonical = tuple(sorted(self._mapping.items()))
 
     def __hash__(self):
