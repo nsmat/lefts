@@ -1,4 +1,4 @@
-from pomap.pomap import Pomap
+from pomap.core.pomap import Pomap
 import polars as pl
 from random import choice
 

@@ -1,16 +1,8 @@
 import polars as pl
 from typing import Self, Literal
-from functools import reduce
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class LabelKey:
-    pomap_name: str
-    label: dict
-
-    def __repr__(self):
-        return f"{self.pomap_name}:{self.label}"
+from pomap.core.label import Label
+from typing import Iterable
+import itertools
 
 
 class _Pomap:
@@ -49,20 +41,53 @@ class _Pomap:
         )
 
     def view_labels(self) -> pl.DataFrame:
-        if self.composition_type == 'leaf':
-            return self.labels
+        labels = self._collect_labels()
+        label_df = pl.from_dicts([label.as_dict() for label in labels])
+        return label_df.select(*sorted(label_df.columns))
 
+    def _collect_labels(self) -> list["Label"]:
+        """
+        Recursively collect all Labels for this PoMap composition.
+        Returns a list of Label objects (immutable, hashable).
+        """
+
+        if self.composition_type == "leaf":
+            return [Label({self.name: val}) for val in self._leaf_labels]
+
+        # Resulting labels are cartesian product of children
         elif self.composition_type == "product":
-            # A product node should return the cross product of its children
-            child_labels = [child.view_labels() for child in self._children]
-            return reduce(lambda left, right: left.join(right, how="cross"), child_labels)
+            child_labels_lists = [child._collect_labels() for child in self._children]
 
+            result = []
+            for combination in itertools.product(*child_labels_lists):
+                merged_mapping = {}
+                for label in combination:
+                    overlap = set(label.as_dict().keys()) & set(merged_mapping.keys())
+                    if overlap:
+                        raise ValueError(
+                            f"Namespace collision in product: PoMap(s) {overlap} "
+                            f"appear in multiple children"
+                        )
+                    merged_mapping.update(label.as_dict())
+                result.append(Label(merged_mapping))
+
+            return result
+
+        # Resulting labels are disjoint union of children labels
         elif self.composition_type == "sum":
-            child_labels = [child.view_labels() for child in self._children]
-            return pl.concat(child_labels, how='diagonal_relaxed')
+            result = []
+            seen = set()
+            for child in self._children:
+                for label in child._collect_labels():
+                    if label in seen:
+                        raise ValueError(f"Label collision in sum composition: {label}")
+                    seen.add(label)
+                    result.append(label)
+
+            return result
 
         else:
-            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
+            raise ValueError(f"Unknown composition_type: {self.composition_type}")
 
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
         df = self._label_rows_as(df, label, label_as='train')
@@ -90,12 +115,12 @@ class _Pomap:
                 'validate': self.validate_label_expr
             }[label_as]
 
-            return leaf_label_method(label, df)
+            return leaf_label_method(label[self.name], df)
 
         elif self.composition_type == 'product':
-            return pl.all_horizontal([child._label_expr(df, label, label_as) for child in self._children])
+            return pl.all_horizontal([child._label_expr(df=df, label=label, label_as=label_as) for child in self._children])
         elif self.composition_type == 'sum':
-            return pl.any_horizontal([child._label_expr(df, label, label_as) for child in self._children])
+            return pl.any_horizontal([child._label_expr(df=df, label=label, label_as=label_as) for child in self._children])
         else:
             raise ValueError(f'Unknown composition type {self.composition_type} encountered')
 
@@ -106,7 +131,7 @@ class _Pomap:
                             }[label_as]
         column_name = column_name_func(label)
 
-        expr = self._label_expr(df, label, label_as)
+        expr = self._label_expr(df=df, label=label, label_as=label_as)
         return df.with_columns(expr.alias(column_name))
 
     # # #  Interface used to slice data during model training
@@ -131,12 +156,13 @@ class _Pomap:
 
 class Pomap(_Pomap):
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, labels: Iterable):
         super().__init__(children=[], name=name, composition_type='leaf')
+        self._leaf_labels = labels
 
     @property
-    def labels(self) -> pl.DataFrame:
-        raise NotImplementedError
+    def labels(self) -> list["Label"]:
+        return [Label({self.name: v}) for v in self._leaf_labels]
 
     def train_label_expr(self, label, df: pl.DataFrame) -> pl.Expr:
         raise NotImplementedError
