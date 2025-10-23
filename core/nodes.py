@@ -1,7 +1,7 @@
 from polars import DataType, Expr
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Optional, Callable, List, Any
+from typing import Iterable, Optional, Callable
 
 
 class PomapNode(ABC):

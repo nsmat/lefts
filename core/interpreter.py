@@ -1,5 +1,5 @@
 from core.nodes import PomapNode, Leaf, Lift, Ensemble
-from typing import Generator
+from typing import Iterator
 from core.label import Label
 from polars import DataFrame
 
@@ -33,7 +33,7 @@ def _validate_tree(node: PomapNode):
     ...
 
 
-def _collect_labels(root: PomapNode) -> Generator[Label]:
+def _collect_labels(root: PomapNode) -> Iterator[Label]:
     match root:
         case Leaf(label=l):
             yield Label(leaf=l)
@@ -53,7 +53,7 @@ def _collect_labels(root: PomapNode) -> Generator[Label]:
             return
 
 
-def _collect_leaves(node: PomapNode) -> Generator[Leaf]:
+def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
     match node.children:
         case []:
             yield node
