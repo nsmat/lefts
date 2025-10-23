@@ -84,20 +84,36 @@ def lift_x(model_x):
 def ensemble_x1_x2(model_x, model_x2):
     return Ensemble([model_x, model_x2])
 
-def test_labels_x(lift_x):
+def test_labels_lift_x(lift_x):
     expected_labels_x1 = {
         Label(leaf='model-x', category='a'),
         Label(leaf='model-x', category='b'),
         Label(leaf='model-x', category='c')
     }
 
-
     assert set(_collect_labels(lift_x)) == expected_labels_x1
 
-def test_fit_x(lift_x, test_dataframe):
+def test_labels_ensemble(ensemble_x1_x2):
+    expected_labels_ensemble = {
+        Label(leaf='model-x'),
+        Label(leaf='model-x2')
+    }
+
+    assert set(_collect_labels(ensemble_x1_x2)) == expected_labels_ensemble
+
+def test_fit_lift_x(lift_x, test_dataframe):
     models = _fit(lift_x, test_dataframe)
 
     assert models[Label(leaf='model-x', category='a')].value == 3
     assert models[Label(leaf='model-x', category='b')].value == 15
     assert models[Label(leaf='model-x', category='c')].value == 6
 
+def test_predict_lift_x(lift_x, test_dataframe):
+    models = _fit(lift_x, test_dataframe)
+    predictions = _predict(lift_x, models, test_dataframe)
+
+    expected = {'a': 3, 'b': 15, 'c': 6}
+    for cat in ['a', 'b', 'c']:
+        unique = predictions.filter(category=cat)[Label(leaf='model-x', category=cat).column()].unique()
+        assert unique.shape[0] == 1
+        assert unique.item(0) == expected[cat]

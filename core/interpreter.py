@@ -1,7 +1,7 @@
 from core.nodes import PomapNode, Leaf, Lift, Ensemble
 from typing import Iterator
 from core.label import Label
-from polars import DataFrame
+from polars import DataFrame, Series
 
 
 def _print_tree(node: PomapNode, prefix='', is_root=True) -> str:
@@ -147,7 +147,8 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
     labels = _collect_labels(node)
     for label in labels:
         test_df = _get_test_df_for_label(node, df, label)
-        predictions = models[label].predict(test_df).rename(label.column())
+        predictions = models[label].predict(test_df)
+        predictions = Series(name=label.column(), values=predictions)
 
         test_df = test_df.with_columns(predictions)
 
