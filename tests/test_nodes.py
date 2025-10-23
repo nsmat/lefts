@@ -18,7 +18,7 @@ def test_dataframe():
 
     df_b = pl.DataFrame(
         {
-            'x': [1., 1.5, 2.],
+            'x': [10., 15., 20.],
             'category': ['b', 'b', 'b']
         }
     )
@@ -31,7 +31,7 @@ def test_dataframe():
     )
 
     df = pl.concat([df_a, df_b, df_c])
-    df = df.with_columns(-pl.col('x'))
+    df = df.with_columns(x2=-pl.col('x'))
 
     return df
 
@@ -76,6 +76,7 @@ def lift_x(model_x):
         atomics=["a", "b", "c"],
         train_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
         test_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
+        name='category'
     )
 
 
@@ -92,3 +93,11 @@ def test_labels_x(lift_x):
 
 
     assert set(_collect_labels(lift_x)) == expected_labels_x1
+
+def test_fit_x(lift_x, test_dataframe):
+    models = _fit(lift_x, test_dataframe)
+
+    assert models[Label(leaf='model-x', category='a')].value == 3
+    assert models[Label(leaf='model-x', category='b')].value == 15
+    assert models[Label(leaf='model-x', category='c')].value == 6
+
