@@ -82,8 +82,6 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
             # from the appropriate child. The correct child is the one
             # That matches the label.
             for child in models:
-                labels = _collect_labels(child)
-                print(list(labels))
                 if label in _collect_labels(child):
                     return _get_train_df_for_label(child, df, label=label)
             raise ValueError(f"Label {label} not present in model labels")

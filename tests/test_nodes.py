@@ -130,6 +130,6 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
 
     predictions = _predict(ensemble_x1_x2, models, test_dataframe)
 
-    assert all(predictions[Label(leaf='model-x').column()] == 8.0)
-    assert all(predictions[Label(leaf='model-x2').column()] == -8.0)
+    assert (predictions[Label(leaf='model-x').column()] == 8.0).all()
+    assert (predictions[Label(leaf='model-x2').column()] == -8.0).all()
 
