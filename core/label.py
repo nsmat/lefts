@@ -1,39 +1,45 @@
-from immutables import Map as FrozenDict
-from typing import Any, Dict
-
-
 class Label:
-    def __init__(self, mapping: Dict[str, Any]):
-        """
-        mapping: leaf PoMap name -> label value (single column per leaf)
-        """
-        self._mapping: FrozenDict = FrozenDict(mapping)
+    def __init__(self, **kwargs):
+        self._data = dict(kwargs)
+        self._hash = hash(frozenset(self._data.items()))
 
-        # canonical form for hashing / equality
-        self._canonical = tuple(sorted(self._mapping.items()))
+    def __getitem__(self, key):
+        return self._data[key]
 
-    def __hash__(self):
-        return hash(self._canonical)
+    def __iter__(self):
+        return iter(self._data)
 
-    def __eq__(self, other):
-        return isinstance(other, Label) and self._canonical == other._canonical
+    def items(self):
+        return self._data.items()
 
-    def __getitem__(self, pomap_name: str):
-        return self._mapping[pomap_name]
+    def keys(self):
+        return self._data.keys()
 
-    def __contains__(self, pomap_name: str):
-        return pomap_name in self._mapping
+    def values(self):
+        return self._data.values()
 
-    def as_dict(self) -> Dict[str, Any]:
-        """Return a regular dict copy."""
-        return dict(self._mapping)
-
-    def matches_partial(self, partial: Dict[str, Any]) -> bool:
-        """Return True if all specified leaf labels match."""
-        for pomap_name, value in partial.items():
-            if pomap_name not in self._mapping or self._mapping[pomap_name] != value:
+    def matches(self, **kwargs):
+        for k, v in kwargs.items():
+            if k not in self._data:
+                raise ValueError(f"Trying to match on unknown namespace {k}")
+            elif self._data[k] != v:
                 return False
         return True
 
+    def drop(self, *keys):
+        new_mapping = {k: v for k, v in self._data.items() if k not in keys}
+        return Label(**new_mapping)
+
+    def __eq__(self, other):
+        if not isinstance(other, Label):
+            return NotImplemented
+        return self._data == other._data
+
+    def __hash__(self):
+        return self._hash
+
     def __repr__(self):
-        return f"Label({self.as_dict()})"
+        return f"Label({self._data})"
+
+    def column(self):
+        return str(self._data)
