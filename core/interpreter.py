@@ -87,7 +87,6 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
                 else:
                     raise ValueError(f"Label {label} not present in leaves")
 
-
         case _:
             raise NotImplementedError(f"Not implemented for node type {node.__name__}")
 
@@ -119,7 +118,7 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
             raise NotImplementedError(f"Not implemented for node type {node.__name__}")
 
 
-def _fit(node: PomapNode, df:DataFrame) -> dict:
+def _fit(node: PomapNode, df: DataFrame) -> dict:
     models = {}
     labels = _collect_labels(node)
 

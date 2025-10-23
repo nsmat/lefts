@@ -11,6 +11,7 @@ class PomapNode(ABC):
         """Return iterable of child nodes."""
         ...
 
+
 @dataclass
 class Leaf(PomapNode):
     label: str
@@ -19,6 +20,7 @@ class Leaf(PomapNode):
     @property
     def children(self):
         return []
+
 
 @dataclass
 class Lift(PomapNode):
