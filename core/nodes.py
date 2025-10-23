@@ -26,8 +26,8 @@ class Leaf(PomapNode):
 class Lift(PomapNode):
     child: PomapNode
     atomics: Iterable[DataType]
-    train_mask_for_label: Callable[DataType, Expr]
-    test_mask_for_label: Callable[DataType, Expr]
+    train_mask_for_label: Callable[[DataType], Expr]
+    test_mask_for_label: Callable[[DataType], Expr]
     name: Optional[str] = None
 
     def __post_init__(self):

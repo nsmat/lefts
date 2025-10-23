@@ -51,11 +51,13 @@ class TestModel:
 @pytest.fixture
 def leaf_factory():
     """Fixture returning a helper that can make Leaf objects for any column."""
+
     def _make_leaf(x_column: str):
         return Leaf(
             label=f"model-{x_column}",
             factory=lambda: TestModel(x_column=x_column)
         )
+
     return _make_leaf
 
 
@@ -84,6 +86,7 @@ def lift_x(model_x):
 def ensemble_x1_x2(model_x, model_x2):
     return Ensemble([model_x, model_x2])
 
+
 def test_labels_lift_x(lift_x):
     expected_labels_x1 = {
         Label(leaf='model-x', category='a'),
@@ -93,6 +96,7 @@ def test_labels_lift_x(lift_x):
 
     assert set(_collect_labels(lift_x)) == expected_labels_x1
 
+
 def test_labels_ensemble(ensemble_x1_x2):
     expected_labels_ensemble = {
         Label(leaf='model-x'),
@@ -101,12 +105,14 @@ def test_labels_ensemble(ensemble_x1_x2):
 
     assert set(_collect_labels(ensemble_x1_x2)) == expected_labels_ensemble
 
+
 def test_fit_lift_x(lift_x, test_dataframe):
     models = _fit(lift_x, test_dataframe)
 
     assert models[Label(leaf='model-x', category='a')].value == 3
     assert models[Label(leaf='model-x', category='b')].value == 15
     assert models[Label(leaf='model-x', category='c')].value == 6
+
 
 def test_predict_lift_x(lift_x, test_dataframe):
     models = _fit(lift_x, test_dataframe)
@@ -117,3 +123,13 @@ def test_predict_lift_x(lift_x, test_dataframe):
         unique = predictions.filter(category=cat)[Label(leaf='model-x', category=cat).column()].unique()
         assert unique.shape[0] == 1
         assert unique.item(0) == expected[cat]
+
+
+def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
+    models = _fit(ensemble_x1_x2, test_dataframe)
+
+    predictions = _predict(ensemble_x1_x2, models, test_dataframe)
+
+    assert all(predictions[Label(leaf='model-x').column()] == 8.0)
+    assert all(predictions[Label(leaf='model-x2').column()] == -8.0)
+
