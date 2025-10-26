@@ -1,6 +1,6 @@
-from core.nodes import PomapNode, Leaf, Lift, Ensemble
+from .nodes import PomapNode, Leaf, Lift, Ensemble
 from typing import Iterator
-from core.label import Label
+from .label import Label
 from polars import DataFrame, Series
 
 

@@ -4,7 +4,7 @@ import polars as pl
 
 from core.label import Label
 from core.nodes import Lift, Leaf, Ensemble
-from core.interpreter import _collect_labels, _collect_leaves, _fit, _predict
+from core.interpreter import _collect_labels, _fit, _predict
 
 
 @pytest.fixture
