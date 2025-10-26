@@ -158,4 +158,6 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
             how='left'
         )
 
+    df = df.drop('__pomap_row_index')
+
     return df
