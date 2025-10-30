@@ -1,5 +1,5 @@
-from .nodes import PomapNode, Leaf, Lift, Ensemble
-from typing import Iterator
+from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom
+from typing import Iterator, Tuple
 from .label import Label
 from polars import DataFrame, Series
 
@@ -45,9 +45,9 @@ def _collect_labels(root: PomapNode) -> Iterator[Label]:
                 for atomic in atomics:
                     yield Label(**{**child_label, name: atomic})
 
-        case Ensemble(models=models):
-            for model in models:
-                yield from _collect_labels(model)
+        case Ensemble() | LearnsFrom():
+            for child in root.children:
+                yield from _collect_labels(child)
 
         case _:
             return
@@ -64,7 +64,7 @@ def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
 
 def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> DataFrame:
     match node:
-        case Leaf():
+        case Leaf() | LearnsFrom():
             return df
 
         case Lift(child=child, name=name, train_mask_for_label=train_mask_for_label):
@@ -93,6 +93,9 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
 def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> DataFrame:
     match node:
         case Leaf():
+            return df
+
+        case Leaf() | LearnsFrom():
             return df
 
         case Lift(child=child, name=name, test_mask_for_label=test_mask_for_label):

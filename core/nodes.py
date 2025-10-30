@@ -1,4 +1,4 @@
-from polars import DataType, Expr
+from polars import DataType, Expr, DataFrame
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Optional, Callable
@@ -48,3 +48,14 @@ class Ensemble(PomapNode):
     @property
     def children(self):
         return self.models
+
+
+class LearnsFrom(PomapNode):
+    learner: PomapNode
+    learns_from: PomapNode
+    learn_logic: Callable[[PomapNode, DataFrame], dict]
+    name = 'LearnsFrom'
+
+    @property
+    def children(self) -> Iterable["PomapNode"]:
+        return [self.learner, self.learns_from]
