@@ -133,3 +133,5 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
     assert (predictions[Label(leaf='model-x').column()] == 8.0).all()
     assert (predictions[Label(leaf='model-x2').column()] == -8.0).all()
 
+
+# TODO add a test for LearnsFrom
