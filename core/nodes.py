@@ -49,7 +49,7 @@ class Ensemble(PomapNode):
     def children(self):
         return self.models
 
-
+@dataclass
 class LearnsFrom(PomapNode):
     learner: PomapNode
     learns_from: PomapNode

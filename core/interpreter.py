@@ -1,7 +1,9 @@
 from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom
-from typing import Iterator, Tuple
+from typing import Iterator, Tuple, Any
 from .label import Label
 from polars import DataFrame, Series
+from dataclasses import dataclass
+
 
 
 def _print_tree(node: PomapNode, prefix='', is_root=True) -> str:
@@ -119,25 +121,96 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
         case _:
             raise NotImplementedError(f"Not implemented for node type {node.__name__}")
 
+@dataclass
+class _Model:
+    root: PomapNode
+    models: dict
+    hyperparameters: dict
 
-def _fit(node: PomapNode, df: DataFrame) -> dict:
-    models = {}
-    labels = _collect_labels(node)
+    def predict(self, df: DataFrame):
+        return _predict(self.root, self.models, df)
 
-    # Create a dictionary of leaves, indexed by their atomic labels
-    leaves = _collect_leaves(node)
-    leaves = {leaf.label: leaf for leaf in leaves}
+def _fit(node: PomapNode,
+         df: DataFrame,
+         hyperparameters: dict = None,
+         label_context: dict = None
+         ) -> Tuple[dict[Label, Any], dict[str, Any]]:
+    """Recursively fit a PomapNode tree. Returns a tuple of dictionaries:
 
-    for label in labels:
-        leaf_label = label['leaf']
-        model = leaves[leaf_label].factory()
+    models, learned_hyperparameters
 
-        train_df = _get_train_df_for_label(node, df, label)
-        model.fit(train_df)
+    """
 
-        models[label] = model
+    label_context = label_context or dict()
+    hyperparameters = hyperparameters or dict()
 
-    return models
+    # Define output types
+    fitted_models: dict[Label, Any] = {}
+    output_hyperparameters: dict[str, Any] = {}
+
+    match node:
+
+        case Leaf(label=label, factory=factory):
+            # Note: it is safe to use the passed hyperparameters
+            # Without further filtering on label, because the hyperparameters
+            # Are passed from a LearnsFrom to every node beneath them in the tree.
+
+            model = factory(**hyperparameters)
+            model.fit(df)
+
+            model_label = Label(leaf=label, **label_context)
+            fitted_models[model_label] = model
+
+        case Lift(child=child,
+                  atomics=atomics,
+                  name=name,
+                  train_mask_for_label=train_mask_for_label
+                  ):
+
+            # Under a lift, we will take the cartesian product
+            # Of the existing labels with the lift atomics
+            # Filtering appropriately based on each label.
+            for atomic in atomics:
+                extended_label_context = {**label_context, name: atomic}
+                sub_df = df.filter(train_mask_for_label(atomic))
+                child_models, child_hyperparameters = _fit(
+                    child,
+                    sub_df,
+                    hyperparameters,
+                    extended_label_context
+                )
+
+                fitted_models |= child_models
+                output_hyperparameters |= child_hyperparameters
+
+
+        case Ensemble():
+            for child in node.children:
+                child_fitted_models, child_learned_hyperparameters = _fit(child, df)
+                fitted_models |= child_fitted_models
+                output_hyperparameters |= child_learned_hyperparameters
+
+        case LearnsFrom(learner=learner, learns_from=learns_from, learn_logic=learn_logic):
+
+            source_models, learned_hyperparameters = _fit(learns_from, df)
+
+            learn_from_model = _Model(learns_from, source_models, learned_hyperparameters)
+            learned_hyperparameters |= learn_logic(learn_from_model, df)
+
+            learner_models, learner_hyperparameters = _fit(
+                learner,
+                df,
+                hyperparameters=learned_hyperparameters
+            )
+
+            fitted_models |= {**source_models, **learner_models}
+            output_hyperparameters |= {**learner_hyperparameters, **learned_hyperparameters}
+
+        case _:
+            raise ValueError(f"Unknown node type {type(node)}")
+
+    return fitted_models, output_hyperparameters
+
 
 
 def _predict(node: PomapNode, models: dict, df: DataFrame):
