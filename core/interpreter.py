@@ -203,8 +203,8 @@ def _fit(node: PomapNode,
                 hyperparameters=learned_hyperparameters
             )
 
-            fitted_models |= {**source_models, **learner_models}
-            output_hyperparameters |= {**learner_hyperparameters, **learned_hyperparameters}
+            fitted_models |= source_models | learner_models
+            output_hyperparameters |= learner_hyperparameters | learned_hyperparameters
 
         case _:
             raise ValueError(f"Unknown node type {type(node)}")
