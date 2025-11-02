@@ -107,7 +107,7 @@ def test_labels_ensemble(ensemble_x1_x2):
 
 
 def test_fit_lift_x(lift_x, test_dataframe):
-    models = _fit(lift_x, test_dataframe)
+    models, _ = _fit(lift_x, test_dataframe)
 
     assert models[Label(leaf='model-x', category='a')].value == 3
     assert models[Label(leaf='model-x', category='b')].value == 15
@@ -115,7 +115,7 @@ def test_fit_lift_x(lift_x, test_dataframe):
 
 
 def test_predict_lift_x(lift_x, test_dataframe):
-    models = _fit(lift_x, test_dataframe)
+    models, _ = _fit(lift_x, test_dataframe)
     predictions = _predict(lift_x, models, test_dataframe)
 
     expected = {'a': 3, 'b': 15, 'c': 6}
@@ -126,7 +126,7 @@ def test_predict_lift_x(lift_x, test_dataframe):
 
 
 def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
-    models = _fit(ensemble_x1_x2, test_dataframe)
+    models, _ = _fit(ensemble_x1_x2, test_dataframe)
 
     predictions = _predict(ensemble_x1_x2, models, test_dataframe)
 
