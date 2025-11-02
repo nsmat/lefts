@@ -35,24 +35,27 @@ def _validate_tree(node: PomapNode):
     ...
 
 
-def _collect_labels(root: PomapNode) -> Iterator[Label]:
-    match root:
+def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
+
+    label_context = label_context or {}
+
+    match node:
         case Leaf(label=l):
-            yield Label(leaf=l)
+            yield Label(leaf=l, **label_context)
 
         case Lift(child=child, atomics=atomics, name=name):
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift atomics
-            for child_label in _collect_labels(child):
-                for atomic in atomics:
-                    yield Label(**{**child_label, name: atomic})
+            for atomic in atomics:
+                extended_label_context = label_context | {name: atomic}
+                yield from _collect_labels(child, extended_label_context)
 
         case Ensemble() | LearnsFrom():
-            for child in root.children:
-                yield from _collect_labels(child)
+            for child in node.children:
+                yield from _collect_labels(child, label_context)
 
         case _:
-            return
+            raise NotImplementedError(f"Not implemented for node type {node.__name__}")
 
 
 def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
