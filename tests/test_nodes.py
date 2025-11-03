@@ -62,7 +62,7 @@ def lift_x(model_x):
         atomics=["a", "b", "c"],
         train_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
         test_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
-        name="category",
+        namespace="category",
     )
 
 

@@ -11,6 +11,10 @@ class PomapNode(ABC):
         """Return iterable of child nodes."""
         ...
 
+    @property
+    @abstractmethod
+    def tree_repr(self) -> str:
+        ...
 
 @dataclass
 class Leaf(PomapNode):
@@ -21,6 +25,9 @@ class Leaf(PomapNode):
     def children(self):
         return []
 
+    @property
+    def tree_repr(self) -> str:
+        return self.label
 
 @dataclass
 class Lift(PomapNode):
@@ -28,35 +35,44 @@ class Lift(PomapNode):
     atomics: Iterable[DataType]
     train_mask_for_label: Callable[[DataType], Expr]
     test_mask_for_label: Callable[[DataType], Expr]
-    name: Optional[str] = None
+    namespace: Optional[str] = None
 
     def __post_init__(self):
-        if self.name is None:
-            self.name = f"Lift: {self.atomics}"
+        if self.namespace is None:
+            self.namespace = f"Lift: {self.atomics}"
         self.atomics = set(self.atomics)
 
     @property
     def children(self) -> Iterable["PomapNode"]:
         return [self.child]
 
+    @property
+    def tree_repr(self) -> str:
+        return f"{self.namespace}: {self.atomics}"
 
 @dataclass
 class Ensemble(PomapNode):
     models: Iterable[PomapNode]
-    name = "Ensemble"
 
     @property
     def children(self):
         return self.models
+
+    @property
+    def tree_repr(self) -> str:
+        return "Ensemble"
 
 
 @dataclass
 class LearnsFrom(PomapNode):
     learner: PomapNode
     learns_from: PomapNode
-    learn_logic: Callable[[PomapNode, DataFrame], dict]
-    name = "LearnsFrom"
+    learn_logic: Callable[[PomapNode, DataFrame], dict] # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
 
     @property
     def children(self) -> Iterable["PomapNode"]:
         return [self.learner, self.learns_from]
+
+    @property
+    def tree_repr(self) -> str:
+        return "LearnsFrom"

@@ -33,7 +33,7 @@ def lift(
     lifted = Lift(
         child=model.root,
         atomics=atomics,
-        name=name,
+        namespace=name,
         train_mask_for_label=train_mask_for_label,
         test_mask_for_label=test_mask_for_label,
     )

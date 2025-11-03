@@ -15,9 +15,9 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
 
     # Internal node
     if is_root:
-        lines = [f"{node.name}"]
+        lines = [f"{node.tree_repr}"]
     else:
-        lines = [f"{prefix}└── {node.name}"]
+        lines = [f"{prefix}└── {node.tree_repr}"]
 
     for i, child in enumerate(node.children):
         next_prefix = prefix + "    "
@@ -49,7 +49,7 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
         case Leaf(label=l):
             yield Label(leaf=l, **label_context)
 
-        case Lift(child=child, atomics=atomics, name=name):
+        case Lift(child=child, atomics=atomics, namespace=name):
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift atomics
             for atomic in atomics:
@@ -78,7 +78,7 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(child=child, name=name, train_mask_for_label=train_mask_for_label):
+        case Lift(child=child, namespace=name, train_mask_for_label=train_mask_for_label):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
@@ -111,7 +111,7 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(child=child, name=name, test_mask_for_label=test_mask_for_label):
+        case Lift(child=child, namespace=name, test_mask_for_label=test_mask_for_label):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
@@ -183,7 +183,7 @@ def _fit(
         case Lift(
             child=child,
             atomics=atomics,
-            name=name,
+            namespace=name,
             train_mask_for_label=train_mask_for_label,
         ):
 
