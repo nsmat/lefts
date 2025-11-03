@@ -25,6 +25,14 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
 
     return "\n".join(lines)
 
+def _mark_in_train_data_for_label(node: PomapNode, df: DataFrame, label: Label):
+    # TODO
+    ...
+
+def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: Label):
+    # TODO
+    ...
+
 
 def _validate_tree(node: PomapNode):
     # TODO Add namespace checking - note there's something a bit funny where
