@@ -25,9 +25,11 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
 
     return "\n".join(lines)
 
+
 def _mark_in_train_data_for_label(node: PomapNode, df: DataFrame, label: Label):
     # TODO
     ...
+
 
 def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: Label):
     # TODO
@@ -78,7 +80,9 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(child=child, namespace=name, train_mask_for_label=train_mask_for_label):
+        case Lift(
+            child=child, namespace=name, train_mask_for_label=train_mask_for_label
+        ):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 

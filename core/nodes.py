@@ -13,8 +13,8 @@ class PomapNode(ABC):
 
     @property
     @abstractmethod
-    def tree_repr(self) -> str:
-        ...
+    def tree_repr(self) -> str: ...
+
 
 @dataclass
 class Leaf(PomapNode):
@@ -28,6 +28,7 @@ class Leaf(PomapNode):
     @property
     def tree_repr(self) -> str:
         return self.label
+
 
 @dataclass
 class Lift(PomapNode):
@@ -50,6 +51,7 @@ class Lift(PomapNode):
     def tree_repr(self) -> str:
         return f"{self.namespace}: {self.atomics}"
 
+
 @dataclass
 class Ensemble(PomapNode):
     models: Iterable[PomapNode]
@@ -67,7 +69,9 @@ class Ensemble(PomapNode):
 class LearnsFrom(PomapNode):
     learner: PomapNode
     learns_from: PomapNode
-    learn_logic: Callable[[PomapNode, DataFrame], dict] # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
+    learn_logic: Callable[
+        [PomapNode, DataFrame], dict
+    ]  # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
 
     @property
     def children(self) -> Iterable["PomapNode"]:
