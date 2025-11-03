@@ -43,18 +43,19 @@ class Lift(PomapNode):
 @dataclass
 class Ensemble(PomapNode):
     models: Iterable[PomapNode]
-    name = 'Ensemble'
+    name = "Ensemble"
 
     @property
     def children(self):
         return self.models
+
 
 @dataclass
 class LearnsFrom(PomapNode):
     learner: PomapNode
     learns_from: PomapNode
     learn_logic: Callable[[PomapNode, DataFrame], dict]
-    name = 'LearnsFrom'
+    name = "LearnsFrom"
 
     @property
     def children(self) -> Iterable["PomapNode"]:

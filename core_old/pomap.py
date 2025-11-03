@@ -6,39 +6,32 @@ import itertools
 
 
 class _Pomap:
-    __COMPOSITION_TYPES = Literal['leaf', 'product', 'sum']
-    __LABEL_TYPES = Literal['train', 'test', 'validate']
+    __COMPOSITION_TYPES = Literal["leaf", "product", "sum"]
+    __LABEL_TYPES = Literal["train", "test", "validate"]
 
     # A PoMap is defined by a 'dimension' and a set of labels belonging to that dimension
-    def __init__(self,
-                 children: list[Self],
-                 name: str,
-                 composition_type: __COMPOSITION_TYPES
-                 ):
+    def __init__(
+        self, children: list[Self], name: str, composition_type: __COMPOSITION_TYPES
+    ):
 
         self.name = name
         self._children = children
         self.composition_type = composition_type
 
         # Implement some standardised naming for the subclasses to use
-        self._train_column_name = lambda label: f'train({label})'
-        self._test_column_name = lambda label: f'test({label})'
-        self._validate_column_name = lambda label: f'validate({label})'
+        self._train_column_name = lambda label: f"train({label})"
+        self._test_column_name = lambda label: f"test({label})"
+        self._validate_column_name = lambda label: f"validate({label})"
 
     def product(self, other: "_Pomap", product_name=None) -> "_Pomap":
-        product_name = product_name or f'{self.name} x {other.name}'
-        return _Pomap(children=[self, other],
-                      name=product_name,
-                      composition_type='product'
-                      )
+        product_name = product_name or f"{self.name} x {other.name}"
+        return _Pomap(
+            children=[self, other], name=product_name, composition_type="product"
+        )
 
     def sum(self, other: "_Pomap", sum_name=None) -> "_Pomap":
         sum_name = sum_name or f"{self.name} + {other.name}"
-        return _Pomap(
-            children=[self, other],
-            name=sum_name,
-            composition_type="sum"
-        )
+        return _Pomap(children=[self, other], name=sum_name, composition_type="sum")
 
     def view_labels(self) -> pl.DataFrame:
         labels = self._collect_labels()
@@ -90,15 +83,15 @@ class _Pomap:
             raise ValueError(f"Unknown composition_type: {self.composition_type}")
 
     def label_rows_as_train(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_rows_as(df, label, label_as='train')
+        df = self._label_rows_as(df, label, label_as="train")
         return df
 
     def label_rows_as_test(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_rows_as(df, label, label_as='test')
+        df = self._label_rows_as(df, label, label_as="test")
         return df
 
     def label_rows_as_validate(self, df: pl.DataFrame, label: dict) -> pl.DataFrame:
-        df = self._label_rows_as(df, label, label_as='validate')
+        df = self._label_rows_as(df, label, label_as="validate")
         return df
 
     def _label_expr(self, df: pl.DataFrame, label, label_as: __LABEL_TYPES) -> pl.Expr:
@@ -107,28 +100,43 @@ class _Pomap:
         period <label_rows_as> for <label>
         """
 
-        if self.composition_type == 'leaf':
+        if self.composition_type == "leaf":
 
             leaf_label_method = {
-                'train': self.train_label_expr,
-                'test': self.test_label_expr,
-                'validate': self.validate_label_expr
+                "train": self.train_label_expr,
+                "test": self.test_label_expr,
+                "validate": self.validate_label_expr,
             }[label_as]
 
             return leaf_label_method(label[self.name], df)
 
-        elif self.composition_type == 'product':
-            return pl.all_horizontal([child._label_expr(df=df, label=label, label_as=label_as) for child in self._children])
-        elif self.composition_type == 'sum':
-            return pl.any_horizontal([child._label_expr(df=df, label=label, label_as=label_as) for child in self._children])
+        elif self.composition_type == "product":
+            return pl.all_horizontal(
+                [
+                    child._label_expr(df=df, label=label, label_as=label_as)
+                    for child in self._children
+                ]
+            )
+        elif self.composition_type == "sum":
+            return pl.any_horizontal(
+                [
+                    child._label_expr(df=df, label=label, label_as=label_as)
+                    for child in self._children
+                ]
+            )
         else:
-            raise ValueError(f'Unknown composition type {self.composition_type} encountered')
+            raise ValueError(
+                f"Unknown composition type {self.composition_type} encountered"
+            )
 
-    def _label_rows_as(self, df: pl.DataFrame, label: dict, label_as: __LABEL_TYPES) -> pl.DataFrame:
-        column_name_func = {'train': self._train_column_name,
-                            'test': self._test_column_name,
-                            'validate': self._validate_column_name,
-                            }[label_as]
+    def _label_rows_as(
+        self, df: pl.DataFrame, label: dict, label_as: __LABEL_TYPES
+    ) -> pl.DataFrame:
+        column_name_func = {
+            "train": self._train_column_name,
+            "test": self._test_column_name,
+            "validate": self._validate_column_name,
+        }[label_as]
         column_name = column_name_func(label)
 
         expr = self._label_expr(df=df, label=label, label_as=label_as)
@@ -155,9 +163,8 @@ class _Pomap:
 
 
 class Pomap(_Pomap):
-
     def __init__(self, name: str, labels: Iterable):
-        super().__init__(children=[], name=name, composition_type='leaf')
+        super().__init__(children=[], name=name, composition_type="leaf")
         self._leaf_labels = labels
 
     @property

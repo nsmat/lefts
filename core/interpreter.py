@@ -5,7 +5,7 @@ from polars import DataFrame, Series
 from dataclasses import dataclass
 
 
-def _print_tree(node: PomapNode, prefix='', is_root=True) -> str:
+def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
     # Leaf formatting
     if not hasattr(node, "children") or not node.children:
         label = getattr(node, "label", str(node))
@@ -78,7 +78,9 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
             # and the part that is relevant for the rest of the tree.
             lift_label, child_label = label[name], label.drop(name)
             mask_expr = train_mask_for_label(lift_label)
-            return _get_train_df_for_label(child, df, label=child_label).filter(mask_expr)
+            return _get_train_df_for_label(child, df, label=child_label).filter(
+                mask_expr
+            )
 
         case Ensemble(models):
             # In an ensemble, we just pass through the dataframe
@@ -109,7 +111,9 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
             # and the part that is relevant for the rest of the tree.
             lift_label, child_label = label[name], label.drop(name)
             mask_expr = test_mask_for_label(lift_label)
-            return _get_test_df_for_label(child, df, label=child_label).filter(mask_expr)
+            return _get_test_df_for_label(child, df, label=child_label).filter(
+                mask_expr
+            )
 
         case Ensemble(models):
             # In an ensemble, we just pass through the dataframe
@@ -136,11 +140,12 @@ class _Model:
         raise NotImplementedError()
 
 
-def _fit(node: PomapNode,
-         df: DataFrame,
-         hyperparameters: dict = None,
-         label_context: dict = None
-         ) -> Tuple[dict[Label, Any], dict[str, Any]]:
+def _fit(
+    node: PomapNode,
+    df: DataFrame,
+    hyperparameters: dict = None,
+    label_context: dict = None,
+) -> Tuple[dict[Label, Any], dict[str, Any]]:
     """Recursively fit a PomapNode tree. Returns a tuple of dictionaries:
 
     models, learned_hyperparameters
@@ -167,11 +172,12 @@ def _fit(node: PomapNode,
             model_label = Label(leaf=label, **label_context)
             fitted_models[model_label] = model
 
-        case Lift(child=child,
-                  atomics=atomics,
-                  name=name,
-                  train_mask_for_label=train_mask_for_label
-                  ):
+        case Lift(
+            child=child,
+            atomics=atomics,
+            name=name,
+            train_mask_for_label=train_mask_for_label,
+        ):
 
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift atomics
@@ -180,10 +186,7 @@ def _fit(node: PomapNode,
                 extended_label_context = {**label_context, name: atomic}
                 sub_df = df.filter(train_mask_for_label(atomic))
                 child_models, child_hyperparameters = _fit(
-                    child,
-                    sub_df,
-                    hyperparameters,
-                    extended_label_context
+                    child, sub_df, hyperparameters, extended_label_context
                 )
 
                 fitted_models |= child_models
@@ -195,17 +198,19 @@ def _fit(node: PomapNode,
                 fitted_models |= child_fitted_models
                 output_hyperparameters |= child_learned_hyperparameters
 
-        case LearnsFrom(learner=learner, learns_from=learns_from, learn_logic=learn_logic):
+        case LearnsFrom(
+            learner=learner, learns_from=learns_from, learn_logic=learn_logic
+        ):
 
             source_models, learned_hyperparameters = _fit(learns_from, df)
 
-            learn_from_model = _Model(learns_from, source_models, learned_hyperparameters)
+            learn_from_model = _Model(
+                learns_from, source_models, learned_hyperparameters
+            )
             learned_hyperparameters |= learn_logic(learn_from_model, df)
 
             learner_models, learner_hyperparameters = _fit(
-                learner,
-                df,
-                hyperparameters=learned_hyperparameters
+                learner, df, hyperparameters=learned_hyperparameters
             )
 
             fitted_models |= source_models | learner_models
@@ -218,10 +223,12 @@ def _fit(node: PomapNode,
 
 
 def _predict(node: PomapNode, models: dict, df: DataFrame):
-    if '__pomap_row_index' in df.columns:
-        raise ValueError('Trying to create column __pomap_row_index but it already exists')
+    if "__pomap_row_index" in df.columns:
+        raise ValueError(
+            "Trying to create column __pomap_row_index but it already exists"
+        )
 
-    df = df.with_row_index(name='__pomap_row_index')
+    df = df.with_row_index(name="__pomap_row_index")
 
     labels = _collect_labels(node)
     for label in labels:
@@ -232,12 +239,12 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
         test_df = test_df.with_columns(predictions)
 
         df = df.join(
-            test_df.select('__pomap_row_index', label.column()),
-            on='__pomap_row_index',
+            test_df.select("__pomap_row_index", label.column()),
+            on="__pomap_row_index",
             coalesce=True,
-            how='left'
+            how="left",
         )
 
-    df = df.drop('__pomap_row_index')
+    df = df.drop("__pomap_row_index")
 
     return df

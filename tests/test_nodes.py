@@ -9,29 +9,14 @@ from core.interpreter import _collect_labels, _fit, _predict
 
 @pytest.fixture
 def test_dataframe():
-    df_a = pl.DataFrame(
-        {
-            'x': [2., 3., 4.],
-            'category': ['a', 'a', 'a']
-        }
-    )
+    df_a = pl.DataFrame({"x": [2.0, 3.0, 4.0], "category": ["a", "a", "a"]})
 
-    df_b = pl.DataFrame(
-        {
-            'x': [10., 15., 20.],
-            'category': ['b', 'b', 'b']
-        }
-    )
+    df_b = pl.DataFrame({"x": [10.0, 15.0, 20.0], "category": ["b", "b", "b"]})
 
-    df_c = pl.DataFrame(
-        {
-            'x': [4., 6., 8.],
-            'category': ['c', 'c', 'c']
-        }
-    )
+    df_c = pl.DataFrame({"x": [4.0, 6.0, 8.0], "category": ["c", "c", "c"]})
 
     df = pl.concat([df_a, df_b, df_c])
-    df = df.with_columns(x2=-pl.col('x'))
+    df = df.with_columns(x2=-pl.col("x"))
 
     return df
 
@@ -54,8 +39,7 @@ def leaf_factory():
 
     def _make_leaf(x_column: str):
         return Leaf(
-            label=f"model-{x_column}",
-            factory=lambda: TestModel(x_column=x_column)
+            label=f"model-{x_column}", factory=lambda: TestModel(x_column=x_column)
         )
 
     return _make_leaf
@@ -78,7 +62,7 @@ def lift_x(model_x):
         atomics=["a", "b", "c"],
         train_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
         test_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
-        name='category'
+        name="category",
     )
 
 
@@ -89,19 +73,16 @@ def ensemble_x1_x2(model_x, model_x2):
 
 def test_labels_lift_x(lift_x):
     expected_labels_x1 = {
-        Label(leaf='model-x', category='a'),
-        Label(leaf='model-x', category='b'),
-        Label(leaf='model-x', category='c')
+        Label(leaf="model-x", category="a"),
+        Label(leaf="model-x", category="b"),
+        Label(leaf="model-x", category="c"),
     }
 
     assert set(_collect_labels(lift_x)) == expected_labels_x1
 
 
 def test_labels_ensemble(ensemble_x1_x2):
-    expected_labels_ensemble = {
-        Label(leaf='model-x'),
-        Label(leaf='model-x2')
-    }
+    expected_labels_ensemble = {Label(leaf="model-x"), Label(leaf="model-x2")}
 
     assert set(_collect_labels(ensemble_x1_x2)) == expected_labels_ensemble
 
@@ -109,18 +90,20 @@ def test_labels_ensemble(ensemble_x1_x2):
 def test_fit_lift_x(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
 
-    assert models[Label(leaf='model-x', category='a')].value == 3
-    assert models[Label(leaf='model-x', category='b')].value == 15
-    assert models[Label(leaf='model-x', category='c')].value == 6
+    assert models[Label(leaf="model-x", category="a")].value == 3
+    assert models[Label(leaf="model-x", category="b")].value == 15
+    assert models[Label(leaf="model-x", category="c")].value == 6
 
 
 def test_predict_lift_x(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
     predictions = _predict(lift_x, models, test_dataframe)
 
-    expected = {'a': 3, 'b': 15, 'c': 6}
-    for cat in ['a', 'b', 'c']:
-        unique = predictions.filter(category=cat)[Label(leaf='model-x', category=cat).column()].unique()
+    expected = {"a": 3, "b": 15, "c": 6}
+    for cat in ["a", "b", "c"]:
+        unique = predictions.filter(category=cat)[
+            Label(leaf="model-x", category=cat).column()
+        ].unique()
         assert unique.shape[0] == 1
         assert unique.item(0) == expected[cat]
 
@@ -130,8 +113,8 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
 
     predictions = _predict(ensemble_x1_x2, models, test_dataframe)
 
-    assert (predictions[Label(leaf='model-x').column()] == 8.0).all()
-    assert (predictions[Label(leaf='model-x2').column()] == -8.0).all()
+    assert (predictions[Label(leaf="model-x").column()] == 8.0).all()
+    assert (predictions[Label(leaf="model-x2").column()] == -8.0).all()
 
 
 # TODO add a test for LearnsFrom

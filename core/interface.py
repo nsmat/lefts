@@ -8,7 +8,6 @@ from .label import Label
 
 @dataclass
 class Model(_Model):
-
     def fit(self, df: DataFrame):
         models, hyperparameters = _fit(self.root, df)
         self.models = models
@@ -17,29 +16,26 @@ class Model(_Model):
     def print_tree(self):
         _print_tree(self.root)
 
-    def view_labels_dataframe(self) -> DataFrame:
-        ...  # TODO
+    def view_labels_dataframe(self) -> DataFrame: ...  # TODO
 
     def collect_labels(self) -> Iterable[Label]:
         return _collect_labels(self.root)
 
 
-def ready(model_constructor: Callable[..., Any],
-          label: str) -> Model:
-    leaf_node = Leaf(
-        label=label,
-        factory=model_constructor,
-    )
+def ready(model_constructor: Callable[..., Any], label: str) -> Model:
+    leaf_node = Leaf(label=label, factory=model_constructor)
     return Model(leaf_node)
 
 
-def lift(model: Model, atomics, name, train_mask_for_label, test_mask_for_label) -> Model:
+def lift(
+    model: Model, atomics, name, train_mask_for_label, test_mask_for_label
+) -> Model:
     lifted = Lift(
         child=model.root,
         atomics=atomics,
         name=name,
         train_mask_for_label=train_mask_for_label,
-        test_mask_for_label=test_mask_for_label
+        test_mask_for_label=test_mask_for_label,
     )
 
     return Model(lifted)
@@ -52,6 +48,8 @@ def ensemble(*models):
 
 
 def learn_from(learner: Model, learns_from, logic: Callable[[Model, DataFrame], dict]):
-    node = LearnsFrom(learner=learner.root, learns_from=learns_from.root, learn_logic=logic)
+    node = LearnsFrom(
+        learner=learner.root, learns_from=learns_from.root, learn_logic=logic
+    )
 
     return Model(node)
