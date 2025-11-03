@@ -1,9 +1,8 @@
 from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom
-from typing import Iterator, Tuple, Any
+from typing import Iterator, Tuple, Any, Optional
 from .label import Label
 from polars import DataFrame, Series
 from dataclasses import dataclass
-
 
 
 def _print_tree(node: PomapNode, prefix='', is_root=True) -> str:
@@ -36,7 +35,6 @@ def _validate_tree(node: PomapNode):
 
 
 def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
-
     label_context = label_context or {}
 
     match node:
@@ -124,14 +122,19 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
         case _:
             raise NotImplementedError(f"Not implemented for node type {node.__name__}")
 
+
 @dataclass
 class _Model:
     root: PomapNode
-    models: dict
-    hyperparameters: dict
+    models: Optional[dict] = None
+    hyperparameters: Optional[dict] = None
 
     def predict(self, df: DataFrame):
         return _predict(self.root, self.models, df)
+
+    def fit(self, df: DataFrame):
+        raise NotImplementedError()
+
 
 def _fit(node: PomapNode,
          df: DataFrame,
@@ -186,7 +189,6 @@ def _fit(node: PomapNode,
                 fitted_models |= child_models
                 output_hyperparameters |= child_hyperparameters
 
-
         case Ensemble():
             for child in node.children:
                 child_fitted_models, child_learned_hyperparameters = _fit(child, df)
@@ -213,7 +215,6 @@ def _fit(node: PomapNode,
             raise ValueError(f"Unknown node type {type(node)}")
 
     return fitted_models, output_hyperparameters
-
 
 
 def _predict(node: PomapNode, models: dict, df: DataFrame):
