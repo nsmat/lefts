@@ -21,7 +21,6 @@ class Model(_Model):
     def collect_labels(self) -> Iterable[Label]:
         return _collect_labels(self.root)
 
-
 def ready(model_constructor: Callable[..., Any], label: str) -> Model:
     leaf_node = Leaf(label=label, factory=model_constructor)
     return Model(leaf_node)

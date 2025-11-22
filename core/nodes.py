@@ -1,7 +1,17 @@
 from polars import DataType, Expr, DataFrame
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Optional, Callable
+from typing import Iterable, Optional, Callable, Protocol, runtime_checkable
+
+@runtime_checkable
+class ModelProtocol(Protocol):
+
+    def fit(self, df):
+        ...
+
+    def predict(self, df):
+        ...
+
 
 
 class PomapNode(ABC):
@@ -19,7 +29,7 @@ class PomapNode(ABC):
 @dataclass
 class Leaf(PomapNode):
     label: str
-    factory: Callable
+    factory: Callable[[], ModelProtocol]
 
     @property
     def children(self):

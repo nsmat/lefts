@@ -36,13 +36,9 @@ def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: Label):
     ...
 
 
-def _validate_tree(node: PomapNode):
-    # TODO Add namespace checking - note there's something a bit funny where
-    # 'Ensemble' is used as the name for all Ensembles, but that doesn't actually
-    # feed into the labels, so won't cause any clashes. I think we just need to disambiguate
-    # The namespace name from the _print_tree name.
+def _validate_tree(node: PomapNode, observed_namespaces=None):
+    # TODO add namespace checking. Need to check both types and namespaces
     ...
-
 
 def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
     label_context = label_context or {}
@@ -86,7 +82,7 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
-            # First, we plit the label into the part that's relevant for the lift
+            # First, we split the label into the part that's relevant for the lift
             # and the part that is relevant for the rest of the tree.
             lift_label, child_label = label[name], label.drop(name)
             mask_expr = train_mask_for_label(lift_label)
