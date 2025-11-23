@@ -36,9 +36,11 @@ def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: Label):
     ...
 
 
-def _validate_tree(node: PomapNode, observed_namespaces=None):
-    # TODO add namespace checking. Need to check both types and namespaces
-    ...
+# def _validate_tree(node: PomapNode, observed_names=None):
+#     # TODO add namespace checking. Need to check both types and namespaces
+#     observed_names = observed_names or set()
+#     for child in node.children:
+#         match
 
 def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
     label_context = label_context or {}
@@ -47,7 +49,7 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
         case Leaf(label=l):
             yield Label(leaf=l, **label_context)
 
-        case Lift(child=child, atomics=atomics, namespace=name):
+        case Lift(child=child, atomics=atomics, name=name):
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift atomics
             for atomic in atomics:
@@ -59,7 +61,7 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
                 yield from _collect_labels(child, label_context)
 
         case _:
-            raise NotImplementedError(f"Not implemented for node type {node.__name__}")
+            raise NotImplementedError(f"Not implemented for node type {node.__class__.__name__}")
 
 
 def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
@@ -77,7 +79,7 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
             return df
 
         case Lift(
-            child=child, namespace=name, train_mask_for_label=train_mask_for_label
+            child=child, name=name, train_mask_for_label=train_mask_for_label
         ):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
@@ -100,7 +102,7 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
             raise ValueError(f"Label {label} not present in model labels")
 
         case _:
-            raise NotImplementedError(f"Not implemented for node type {node.__name__}")
+            raise NotImplementedError(f"Not implemented for node type {node.__class__.__name__}")
 
 
 def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> DataFrame:
@@ -111,7 +113,7 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(child=child, namespace=name, test_mask_for_label=test_mask_for_label):
+        case Lift(child=child, name=name, test_mask_for_label=test_mask_for_label):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
@@ -123,7 +125,7 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
                 mask_expr
             )
 
-        case Ensemble(models):
+        case Ensemble(models=models):
             # In an ensemble, we just pass through the dataframe
             # from the appropriate child. The correct child is the one
             # That matches the label.
@@ -132,7 +134,7 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
                     return _get_test_df_for_label(child, df, label=label)
 
         case _:
-            raise NotImplementedError(f"Not implemented for node type {node.__name__}")
+            raise NotImplementedError(f"Not implemented for node type {node.__class__.__name__}")
 
 
 @dataclass
@@ -183,7 +185,7 @@ def _fit(
         case Lift(
             child=child,
             atomics=atomics,
-            namespace=name,
+            name=name,
             train_mask_for_label=train_mask_for_label,
         ):
 

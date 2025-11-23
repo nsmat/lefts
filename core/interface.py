@@ -14,9 +14,11 @@ class Model(_Model):
         self.hyperparameters = hyperparameters
 
     def print_tree(self):
-        _print_tree(self.root)
+        print(_print_tree(self.root))
 
-    def view_labels_dataframe(self) -> DataFrame: ...  # TODO
+    def view_labels_dataframe(self) -> DataFrame:
+        raise NotImplemented()
+
 
     def collect_labels(self) -> Iterable[Label]:
         return _collect_labels(self.root)
@@ -32,7 +34,7 @@ def lift(
     lifted = Lift(
         child=model.root,
         atomics=atomics,
-        namespace=name,
+        name=name,
         train_mask_for_label=train_mask_for_label,
         test_mask_for_label=test_mask_for_label,
     )
@@ -40,15 +42,19 @@ def lift(
     return Model(lifted)
 
 
-def ensemble(*models):
-    node = Ensemble(models)
+def ensemble(name: str, *models):
+    roots = [model.root for model in models]
+    node = Ensemble(name, roots)
 
     return Model(node)
 
 
-def learn_from(learner: Model, learns_from, logic: Callable[[Model, DataFrame], dict]):
+def learn_from(name, learner: Model, learns_from, logic: Callable[[Model, DataFrame], dict]):
     node = LearnsFrom(
-        learner=learner.root, learns_from=learns_from.root, learn_logic=logic
+        name=name,
+        learner=learner.root,
+        learns_from=learns_from.root,
+        learn_logic=logic
     )
 
     return Model(node)

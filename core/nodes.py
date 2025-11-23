@@ -13,8 +13,10 @@ class ModelProtocol(Protocol):
         ...
 
 
-
 class PomapNode(ABC):
+
+    name: str
+
     @property
     @abstractmethod
     def children(self) -> Iterable["PomapNode"]:
@@ -24,6 +26,7 @@ class PomapNode(ABC):
     @property
     @abstractmethod
     def tree_repr(self) -> str: ...
+
 
 
 @dataclass
@@ -39,18 +42,20 @@ class Leaf(PomapNode):
     def tree_repr(self) -> str:
         return self.label
 
+    @property
+    def name(self) -> str:
+        return f'Leaf: {self.label}'
+
 
 @dataclass
 class Lift(PomapNode):
+    name: str
     child: PomapNode
     atomics: Iterable[DataType]
     train_mask_for_label: Callable[[DataType], Expr]
     test_mask_for_label: Callable[[DataType], Expr]
-    namespace: Optional[str] = None
 
     def __post_init__(self):
-        if self.namespace is None:
-            self.namespace = f"Lift: {self.atomics}"
         self.atomics = set(self.atomics)
 
     @property
@@ -59,11 +64,12 @@ class Lift(PomapNode):
 
     @property
     def tree_repr(self) -> str:
-        return f"{self.namespace}: {self.atomics}"
+        return f"{self.name}: {self.atomics}"
 
 
 @dataclass
 class Ensemble(PomapNode):
+    name: str
     models: Iterable[PomapNode]
 
     @property
@@ -72,11 +78,13 @@ class Ensemble(PomapNode):
 
     @property
     def tree_repr(self) -> str:
-        return "Ensemble"
+        return f"Ensemble: {self.name}"
 
 
 @dataclass
 class LearnsFrom(PomapNode):
+    name: str
+
     learner: PomapNode
     learns_from: PomapNode
     learn_logic: Callable[
@@ -89,4 +97,4 @@ class LearnsFrom(PomapNode):
 
     @property
     def tree_repr(self) -> str:
-        return "LearnsFrom"
+        return f"LearnsFrom: {self.name}"

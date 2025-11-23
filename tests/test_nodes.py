@@ -58,17 +58,17 @@ def model_x2(leaf_factory):
 @pytest.fixture
 def lift_x(model_x):
     return Lift(
-        model_x,
+        name="category",
+        child=model_x,
         atomics=["a", "b", "c"],
         train_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
         test_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
-        namespace="category",
     )
 
 
 @pytest.fixture
 def ensemble_x1_x2(model_x, model_x2):
-    return Ensemble([model_x, model_x2])
+    return Ensemble(name='ensemble', models=[model_x, model_x2])
 
 
 def test_labels_lift_x(lift_x):
