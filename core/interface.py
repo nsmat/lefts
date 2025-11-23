@@ -29,7 +29,7 @@ def ready(model_constructor: Callable[..., Any], label: str) -> Model:
 
 
 def lift(
-    model: Model, atomics, name, train_mask_for_label, test_mask_for_label
+    model: Model, atomics, name, train_mask_for_label, test_mask_for_label, validation_mask_for_label=None
 ) -> Model:
     lifted = Lift(
         child=model.root,
@@ -37,6 +37,7 @@ def lift(
         name=name,
         train_mask_for_label=train_mask_for_label,
         test_mask_for_label=test_mask_for_label,
+        validation_mask_for_label=validation_mask_for_label
     )
 
     return Model(lifted)
@@ -50,7 +51,7 @@ def ensemble(name: str, *models):
 
 
 def learn_from(
-    name, learner: Model, learns_from, logic: Callable[[Model, DataFrame], dict]
+    name, learner: Model, learns_from: Model, logic: Callable[[Model, DataFrame], dict]
 ):
     node = LearnsFrom(
         name=name, learner=learner.root, learns_from=learns_from.root, learn_logic=logic

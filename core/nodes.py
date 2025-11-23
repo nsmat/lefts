@@ -87,7 +87,7 @@ class LearnsFrom(PomapNode):
     learner: PomapNode
     learns_from: PomapNode
     learn_logic: Callable[
-        [PomapNode, DataFrame], dict
+        ["PomapNode", DataFrame], dict
     ]  # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
 
     @property
