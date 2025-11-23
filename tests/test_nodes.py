@@ -68,7 +68,7 @@ def lift_x(model_x):
 
 @pytest.fixture
 def ensemble_x1_x2(model_x, model_x2):
-    return Ensemble(name='ensemble', models=[model_x, model_x2])
+    return Ensemble(name="ensemble", models=[model_x, model_x2])
 
 
 def test_labels_lift_x(lift_x):

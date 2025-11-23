@@ -41,6 +41,7 @@ def _validate_tree(node: PomapNode, observed_names=None):
     # TODO add namespace checking. Need to check both types and namespaces
     ...
 
+
 def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
     label_context = label_context or {}
 
@@ -60,7 +61,9 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
                 yield from _collect_labels(child, label_context)
 
         case _:
-            raise NotImplementedError(f"Not implemented for node type {node.__class__.__name__}")
+            raise NotImplementedError(
+                f"Not implemented for node type {node.__class__.__name__}"
+            )
 
 
 def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
@@ -77,9 +80,7 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(
-            child=child, name=name, train_mask_for_label=train_mask_for_label
-        ):
+        case Lift(child=child, name=name, train_mask_for_label=train_mask_for_label):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
@@ -101,7 +102,9 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
             raise ValueError(f"Label {label} not present in model labels")
 
         case _:
-            raise NotImplementedError(f"Not implemented for node type {node.__class__.__name__}")
+            raise NotImplementedError(
+                f"Not implemented for node type {node.__class__.__name__}"
+            )
 
 
 def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> DataFrame:
@@ -133,7 +136,9 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
                     return _get_test_df_for_label(child, df, label=label)
 
         case _:
-            raise NotImplementedError(f"Not implemented for node type {node.__class__.__name__}")
+            raise NotImplementedError(
+                f"Not implemented for node type {node.__class__.__name__}"
+            )
 
 
 @dataclass
@@ -181,10 +186,14 @@ def _fit(
             fit_signature = signature(model.fit)
             fit_kwargs = dict()
 
-            if 'validation_set' in fit_signature.parameters:
-                fit_kwargs['validation_set'] = validation_df
-            elif ('validation_set' not in fit_signature.parameters) and (validation_df is not None):
-                raise ValueError(f"Validation set created but model {label} does not accept it in fit method")
+            if "validation_set" in fit_signature.parameters:
+                fit_kwargs["validation_set"] = validation_df
+            elif ("validation_set" not in fit_signature.parameters) and (
+                validation_df is not None
+            ):
+                raise ValueError(
+                    f"Validation set created but model {label} does not accept it in fit method"
+                )
 
             model.fit(df, **fit_kwargs)
 
@@ -207,14 +216,19 @@ def _fit(
 
                 sub_train_df = df.filter(train_mask_for_label(atomic))
 
-
                 if validation_mask_for_label is not None and validation_df is not None:
-                    sub_validation_df = validation_df.filter(validation_mask_for_label(atomic))
+                    sub_validation_df = validation_df.filter(
+                        validation_mask_for_label(atomic)
+                    )
                 else:
                     sub_validation_df = validation_df
 
                 child_models, child_hyperparameters = _fit(
-                    child, sub_train_df, sub_validation_df, hyperparameters, extended_label_context
+                    child,
+                    sub_train_df,
+                    sub_validation_df,
+                    hyperparameters,
+                    extended_label_context,
                 )
 
                 fitted_models |= child_models

@@ -19,9 +19,9 @@ class Model(_Model):
     def view_labels_dataframe(self) -> DataFrame:
         raise NotImplemented()
 
-
     def collect_labels(self) -> Iterable[Label]:
         return _collect_labels(self.root)
+
 
 def ready(model_constructor: Callable[..., Any], label: str) -> Model:
     leaf_node = Leaf(label=label, factory=model_constructor)
@@ -49,12 +49,11 @@ def ensemble(name: str, *models):
     return Model(node)
 
 
-def learn_from(name, learner: Model, learns_from, logic: Callable[[Model, DataFrame], dict]):
+def learn_from(
+    name, learner: Model, learns_from, logic: Callable[[Model, DataFrame], dict]
+):
     node = LearnsFrom(
-        name=name,
-        learner=learner.root,
-        learns_from=learns_from.root,
-        learn_logic=logic
+        name=name, learner=learner.root, learns_from=learns_from.root, learn_logic=logic
     )
 
     return Model(node)

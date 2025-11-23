@@ -3,14 +3,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Optional, Callable, Protocol, runtime_checkable
 
+
 @runtime_checkable
 class ModelProtocol(Protocol):
 
-    def fit(self, df):
-        ...
+    def fit(self, df): ...
 
-    def predict(self, df):
-        ...
+    def predict(self, df): ...
 
 
 class PomapNode(ABC):
@@ -28,7 +27,6 @@ class PomapNode(ABC):
     def tree_repr(self) -> str: ...
 
 
-
 @dataclass
 class Leaf(PomapNode):
     label: str
@@ -44,7 +42,7 @@ class Leaf(PomapNode):
 
     @property
     def name(self) -> str:
-        return f'Leaf: {self.label}'
+        return f"Leaf: {self.label}"
 
 
 @dataclass
