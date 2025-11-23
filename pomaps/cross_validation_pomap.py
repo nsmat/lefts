@@ -2,11 +2,12 @@ from pomap.core.pomap import Pomap
 import polars as pl
 from random import choice
 
+
 class RandomisedCrossValidationPoMap(Pomap):
 
     # TODO swap this for a stable randomised mapping function - just use md5 hash and modulo.
-    def __init__(self, num_folds: int, index_column: 'str'):
-        super().__init__(name=f'Randomised CV: {index_column}')
+    def __init__(self, num_folds: int, index_column: "str"):
+        super().__init__(name=f"Randomised CV: {index_column}")
         self.num_folds = num_folds
         self.index_column = index_column
         self.fold_labels = [str(c) for c in range(num_folds)]
@@ -25,12 +26,10 @@ class RandomisedCrossValidationPoMap(Pomap):
 
         # Every row is randomly assigned to one of the possible folds
         all_indexes = df.select(self.index_column).unique()
-        index_to_label_dict = {index: self.index_to_label(index) for index in all_indexes}
+        index_to_label_dict = {
+            index: self.index_to_label(index) for index in all_indexes
+        }
 
         expr = pl.col(self.index_column).replace_strict(index_to_label_dict) == label
 
         return expr
-
-
-
-
