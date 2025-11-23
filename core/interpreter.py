@@ -36,11 +36,9 @@ def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: Label):
     ...
 
 
-# def _validate_tree(node: PomapNode, observed_names=None):
-#     # TODO add namespace checking. Need to check both types and namespaces
-#     observed_names = observed_names or set()
-#     for child in node.children:
-#         match
+def _validate_tree(node: PomapNode, observed_names=None):
+    # TODO add namespace checking. Need to check both types and namespaces
+    ...
 
 def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
     label_context = label_context or {}
