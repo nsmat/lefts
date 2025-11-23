@@ -184,6 +184,11 @@ def _fit(
             model = factory(**hyperparameters)
 
             fit_signature = signature(model.fit)
+            allowable_fit_parameters = {'training_set', 'validation_set'}
+            excess_parameters = set(fit_signature.parameters) - allowable_fit_parameters
+            assert excess_parameters == {}, (f"Model {label} .fit(...) should only have arguments {allowable_fit_parameters} "
+                                             f" but has unexpected parameters {excess_parameters}")
+
             fit_kwargs = dict()
 
             if "validation_set" in fit_signature.parameters:
@@ -192,7 +197,7 @@ def _fit(
                 validation_df is not None
             ):
                 raise ValueError(
-                    f"Validation set created but model {label} does not accept it in fit method"
+                    f"Validation set created but model {label} .fit has no validation_set argument"
                 )
 
             model.fit(df, **fit_kwargs)
