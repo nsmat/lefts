@@ -54,6 +54,7 @@ class Lift(PomapNode):
     atomics: Iterable[DataType]
     train_mask_for_label: Callable[[DataType], Expr]
     test_mask_for_label: Callable[[DataType], Expr]
+    validation_mask_for_label: Callable[[DataType], Expr] = None
 
     def __post_init__(self):
         self.atomics = set(self.atomics)

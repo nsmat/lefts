@@ -3,6 +3,7 @@ from typing import Iterator, Tuple, Any, Optional
 from .label import Label
 from polars import DataFrame, Series
 from dataclasses import dataclass
+from inspect import signature
 
 
 def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
@@ -151,6 +152,7 @@ class _Model:
 def _fit(
     node: PomapNode,
     df: DataFrame,
+    validation_df: DataFrame = None,
     hyperparameters: dict = None,
     label_context: dict = None,
 ) -> Tuple[dict[Label, Any], dict[str, Any]]:
@@ -175,7 +177,16 @@ def _fit(
             # Are passed from a LearnsFrom to every node beneath them in the tree.
 
             model = factory(**hyperparameters)
-            model.fit(df)
+
+            fit_signature = signature(model.fit)
+            fit_kwargs = dict()
+
+            if 'validation_set' in fit_signature.parameters:
+                fit_kwargs['validation_set'] = validation_df
+            elif ('validation_set' not in fit_signature.parameters) and (validation_df is not None):
+                raise ValueError(f"Validation set created but model {label} does not accept it in fit method")
+
+            model.fit(df, **fit_kwargs)
 
             model_label = Label(leaf=label, **label_context)
             fitted_models[model_label] = model
@@ -185,6 +196,7 @@ def _fit(
             atomics=atomics,
             name=name,
             train_mask_for_label=train_mask_for_label,
+            validation_mask_for_label=validation_mask_for_label,
         ):
 
             # Under a lift, we will take the cartesian product
@@ -192,9 +204,17 @@ def _fit(
             # Filtering appropriately based on each label.
             for atomic in atomics:
                 extended_label_context = {**label_context, name: atomic}
-                sub_df = df.filter(train_mask_for_label(atomic))
+
+                sub_train_df = df.filter(train_mask_for_label(atomic))
+
+
+                if validation_mask_for_label is not None and validation_df is not None:
+                    sub_validation_df = validation_df.filter(validation_mask_for_label(atomic))
+                else:
+                    sub_validation_df = validation_df
+
                 child_models, child_hyperparameters = _fit(
-                    child, sub_df, hyperparameters, extended_label_context
+                    child, sub_train_df, sub_validation_df, hyperparameters, extended_label_context
                 )
 
                 fitted_models |= child_models
