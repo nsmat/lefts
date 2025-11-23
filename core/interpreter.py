@@ -186,7 +186,7 @@ def _fit(
             fit_signature = signature(model.fit)
             allowable_fit_parameters = {'training_set', 'validation_set'}
             excess_parameters = set(fit_signature.parameters) - allowable_fit_parameters
-            assert excess_parameters == {}, (f"Model {label} .fit(...) should only have arguments {allowable_fit_parameters} "
+            assert excess_parameters == set(), (f"Model {label} .fit(...) should only have arguments {allowable_fit_parameters} "
                                              f" but has unexpected parameters {excess_parameters}")
 
             fit_kwargs = dict()
