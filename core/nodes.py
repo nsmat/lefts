@@ -3,14 +3,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Optional, Callable, Protocol, runtime_checkable
 
+
 @runtime_checkable
 class ModelProtocol(Protocol):
 
-    def fit(self, df):
-        ...
+    def fit(self, df): ...
 
-    def predict(self, df):
-        ...
+    def predict(self, df): ...
 
 
 class PomapNode(ABC):
@@ -28,7 +27,6 @@ class PomapNode(ABC):
     def tree_repr(self) -> str: ...
 
 
-
 @dataclass
 class Leaf(PomapNode):
     label: str
@@ -44,7 +42,7 @@ class Leaf(PomapNode):
 
     @property
     def name(self) -> str:
-        return f'Leaf: {self.label}'
+        return f"Leaf: {self.label}"
 
 
 @dataclass
@@ -54,6 +52,7 @@ class Lift(PomapNode):
     atomics: Iterable[DataType]
     train_mask_for_label: Callable[[DataType], Expr]
     test_mask_for_label: Callable[[DataType], Expr]
+    validation_mask_for_label: Callable[[DataType], Expr] = None
 
     def __post_init__(self):
         self.atomics = set(self.atomics)
@@ -88,12 +87,12 @@ class LearnsFrom(PomapNode):
     learner: PomapNode
     learns_from: PomapNode
     learn_logic: Callable[
-        [PomapNode, DataFrame], dict
+        ["PomapNode", DataFrame], dict
     ]  # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
 
     @property
     def children(self) -> Iterable["PomapNode"]:
-        return [self.learner, self.learns_from]
+        return [self.learns_from, self.learner]
 
     @property
     def tree_repr(self) -> str:

@@ -26,8 +26,8 @@ class TestModel:
     x_column: str
     value = None
 
-    def fit(self, df: pl.DataFrame):
-        self.value = df[self.x_column].mean()
+    def fit(self, training_set: pl.DataFrame):
+        self.value = training_set[self.x_column].mean()
 
     def predict(self, df: pl.DataFrame):
         return [self.value] * df.shape[0]
@@ -68,7 +68,7 @@ def lift_x(model_x):
 
 @pytest.fixture
 def ensemble_x1_x2(model_x, model_x2):
-    return Ensemble(name='ensemble', models=[model_x, model_x2])
+    return Ensemble(name="ensemble", models=[model_x, model_x2])
 
 
 def test_labels_lift_x(lift_x):
