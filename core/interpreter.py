@@ -1,7 +1,7 @@
 from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom
 from typing import Iterator, Tuple, Any, Optional
 from .label import Label
-from polars import DataFrame, Series
+from polars import DataFrame, Series, Expr, lit
 from dataclasses import dataclass
 from inspect import signature
 
@@ -154,12 +154,62 @@ class _Model:
         raise NotImplementedError()
 
 
+def _collect_masks(
+        node: PomapNode,
+        label_context: dict | None = None,
+        train_mask: Expr | None = None,
+        validation_mask: Expr | None = None,
+        test_mask: Expr | None = None,
+):
+    label_context = label_context or dict()
+
+    train_mask = train_mask or lit(True)
+    test_mask = test_mask or lit(True)
+
+    match node:
+        case Leaf(label=leaf_label):
+            full_label = Label(leaf=leaf_label, **label_context)
+            yield full_label, train_mask, validation_mask, test_mask
+
+        case Lift(child=child,
+                  name=name,
+                  atomics=atomics,
+                  train_mask_for_label=train_mask_for_label,
+                  validation_mask_for_label=validation_mask_for_label,
+                  test_mask_for_label=test_mask_for_label
+                  ):
+
+            for atomic in atomics:
+
+                next_label_context = {name: atomic, **label_context}
+
+                lift_train_mask = train_mask_for_label(atomic)
+                next_train_mask = lift_train_mask & train_mask
+
+                lift_test_mask = test_mask_for_label(atomic)
+                next_test_mask = lift_test_mask & test_mask
+
+                if validation_mask_for_label is None:
+                    validation_mask_for_label = validation_mask_for_label
+                    next_validation_mask = validation_mask
+                else:
+                    next_validation_mask = validation_mask_for_label(atomic)
+                    if validation_mask is not None:
+                        next_validation_mask = next_validation_mask & validation_mask
+
+                yield from _collect_masks(child, next_label_context, next_train_mask, next_validation_mask, next_test_mask)
+
+        case PomapNode():
+            for child in node.children:
+                yield from _collect_masks(child, label_context, train_mask, validation_mask, test_mask)
+        
+
 def _fit(
-    node: PomapNode,
-    df: DataFrame,
-    validation_df: DataFrame = None,
-    hyperparameters: dict = None,
-    label_context: dict = None,
+        node: PomapNode,
+        df: DataFrame,
+        validation_df: DataFrame = None,
+        hyperparameters: dict = None,
+        label_context: dict = None,
 ) -> Tuple[dict[Label, Any], dict[str, Any]]:
     """Recursively fit a PomapNode tree. Returns a tuple of dictionaries:
 
@@ -186,15 +236,17 @@ def _fit(
             fit_signature = signature(model.fit)
             allowable_fit_parameters = {'training_set', 'validation_set'}
             excess_parameters = set(fit_signature.parameters) - allowable_fit_parameters
-            assert excess_parameters == set(), (f"Model {label} .fit(...) should only have arguments {allowable_fit_parameters} "
-                                             f" but has unexpected parameters {excess_parameters}")
+            assert excess_parameters == set(), (
+                f"Model {label} .fit(...) should only have arguments {allowable_fit_parameters} "
+                f" but has unexpected parameters {excess_parameters}")
 
             fit_kwargs = dict()
 
             if "validation_set" in fit_signature.parameters:
                 fit_kwargs["validation_set"] = validation_df
+                print(f'Using validation set {validation_df.shape}')
             elif ("validation_set" not in fit_signature.parameters) and (
-                validation_df is not None
+                    validation_df is not None
             ):
                 raise ValueError(
                     f"Validation set created but model {label} .fit has no validation_set argument"
@@ -221,10 +273,15 @@ def _fit(
 
                 sub_train_df = df.filter(train_mask_for_label(atomic))
 
-                if validation_mask_for_label is not None and validation_df is not None:
-                    sub_validation_df = validation_df.filter(
-                        validation_mask_for_label(atomic)
-                    )
+                if validation_mask_for_label is not None:
+                    if validation_df is not None:
+                        sub_validation_df = validation_df.filter(
+                            validation_mask_for_label(atomic)
+                        )
+                    else:
+                        # TODO big issue here - do you want to filter off train or the global df?
+                        # TODO the issue goes away if you replace filtering with expressions
+                        sub_validation_df = df.filter(validation_mask_for_label(atomic))
                 else:
                     sub_validation_df = validation_df
 
