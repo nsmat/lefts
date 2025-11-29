@@ -155,11 +155,11 @@ class _Model:
 
 
 def _collect_masks(
-        node: PomapNode,
-        label_context: dict | None = None,
-        train_mask: Expr | None = None,
-        validation_mask: Expr | None = None,
-        test_mask: Expr | None = None,
+    node: PomapNode,
+    label_context: dict | None = None,
+    train_mask: Expr | None = None,
+    validation_mask: Expr | None = None,
+    test_mask: Expr | None = None,
 ):
     label_context = label_context or dict()
 
@@ -171,13 +171,14 @@ def _collect_masks(
             full_label = Label(leaf=leaf_label, **label_context)
             yield full_label, train_mask, validation_mask, test_mask
 
-        case Lift(child=child,
-                  name=name,
-                  atomics=atomics,
-                  train_mask_for_label=train_mask_for_label,
-                  validation_mask_for_label=validation_mask_for_label,
-                  test_mask_for_label=test_mask_for_label
-                  ):
+        case Lift(
+            child=child,
+            name=name,
+            atomics=atomics,
+            train_mask_for_label=train_mask_for_label,
+            validation_mask_for_label=validation_mask_for_label,
+            test_mask_for_label=test_mask_for_label,
+        ):
 
             for atomic in atomics:
 
@@ -197,19 +198,28 @@ def _collect_masks(
                     if validation_mask is not None:
                         next_validation_mask = next_validation_mask & validation_mask
 
-                yield from _collect_masks(child, next_label_context, next_train_mask, next_validation_mask, next_test_mask)
+                yield from _collect_masks(
+                    child,
+                    next_label_context,
+                    next_train_mask,
+                    next_validation_mask,
+                    next_test_mask,
+                )
 
         case PomapNode():
             for child in node.children:
-                yield from _collect_masks(child, label_context, train_mask, validation_mask, test_mask)
+                yield from _collect_masks(
+                    child, label_context, train_mask, validation_mask, test_mask
+                )
+
 
 def _fit(
-        node: PomapNode,
-        df: DataFrame,
-        hyperparameters: dict = None,
-        label_context: dict = None,
-        is_root=True,
-        precomputed_masks: dict = None
+    node: PomapNode,
+    df: DataFrame,
+    hyperparameters: dict = None,
+    label_context: dict = None,
+    is_root=True,
+    precomputed_masks: dict = None,
 ) -> Tuple[dict[Label, Any], dict[str, Any]]:
 
     label_context = label_context or dict()
@@ -244,21 +254,24 @@ def _fit(
             # It expects a validation set, and also to perform runtime checking
             # That it's signature conforms to expectations.
 
-            allowable_fit_parameters = {'training_set', 'validation_set'}
+            allowable_fit_parameters = {"training_set", "validation_set"}
             excess_parameters = set(fit_signature.parameters) - allowable_fit_parameters
             assert excess_parameters == set(), (
                 f"Model {label} .fit(...) should only have arguments {allowable_fit_parameters} "
-                f" but has unexpected parameters {excess_parameters}")
-
+                f" but has unexpected parameters {excess_parameters}"
+            )
 
             # Now, if required, we compute the validation set and pass it through to the
             # fit function as a kwarg.
             fit_kwargs = dict()
-            if "validation_set" in fit_signature.parameters and validation_mask is not None:
+            if (
+                "validation_set" in fit_signature.parameters
+                and validation_mask is not None
+            ):
                 fit_kwargs["validation_set"] = df.filter(validation_mask)
 
             elif ("validation_set" not in fit_signature.parameters) and (
-                    validation_mask is not None
+                validation_mask is not None
             ):
                 raise ValueError(
                     f"Validation set created but model {label} .fit has no validation_set argument"
@@ -268,11 +281,7 @@ def _fit(
 
             fitted_models[model_label] = model
 
-        case Lift(
-            child=child,
-            atomics=atomics,
-            name=name
-        ):
+        case Lift(child=child, atomics=atomics, name=name):
 
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift atomics
@@ -286,7 +295,7 @@ def _fit(
                     hyperparameters,
                     extended_label_context,
                     False,
-                    precomputed_masks
+                    precomputed_masks,
                 )
 
                 fitted_models |= child_models
@@ -295,12 +304,7 @@ def _fit(
         case Ensemble():
             for child in node.children:
                 child_fitted_models, child_learned_hyperparameters = _fit(
-                    child,
-                    df,
-                    hyperparameters,
-                    label_context,
-                    False,
-                    precomputed_masks
+                    child, df, hyperparameters, label_context, False, precomputed_masks
                 )
                 fitted_models |= child_fitted_models
                 output_hyperparameters |= child_learned_hyperparameters
@@ -309,7 +313,10 @@ def _fit(
             learner=learner, learns_from=learns_from, learn_logic=learn_logic
         ):
 
-            source_models, learned_hyperparameters = _fit(learns_from, df, )
+            source_models, learned_hyperparameters = _fit(
+                learns_from,
+                df,
+            )
 
             learn_from_model = _Model(
                 learns_from, source_models, learned_hyperparameters
@@ -317,11 +324,12 @@ def _fit(
             learned_hyperparameters |= learn_logic(learn_from_model, df)
 
             learner_models, learner_hyperparameters = _fit(
-                learner, df,
+                learner,
+                df,
                 learned_hyperparameters,
                 label_context,
                 False,
-                precomputed_masks
+                precomputed_masks,
             )
 
             fitted_models |= source_models | learner_models
