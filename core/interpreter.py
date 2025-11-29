@@ -163,8 +163,8 @@ def _collect_masks(
 ):
     label_context = label_context or dict()
 
-    train_mask = train_mask or lit(True)
-    test_mask = test_mask or lit(True)
+    train_mask = train_mask if train_mask is not None else lit(True)
+    test_mask = test_mask if test_mask is not None else lit(True)
 
     match node:
         case Leaf(label=leaf_label):
@@ -233,8 +233,8 @@ def _fit(
             model = factory(**hyperparameters)
             model_label = Label(leaf=label, **label_context)
 
-            train_mask = model_label[label][0]
-            validation_mask = model_label[label][1]
+            train_mask = precomputed_masks[model_label][0]
+            validation_mask = precomputed_masks[model_label][1]
 
             train_df = df.filter(train_mask)
 
