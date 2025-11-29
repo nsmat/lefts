@@ -26,8 +26,8 @@ class TestModel:
     x_column: str
     value = None
 
-    def fit(self, df: pl.DataFrame):
-        self.value = df[self.x_column].mean()
+    def fit(self, training_set: pl.DataFrame):
+        self.value = training_set[self.x_column].mean()
 
     def predict(self, df: pl.DataFrame):
         return [self.value] * df.shape[0]
