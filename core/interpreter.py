@@ -202,7 +202,7 @@ def _collect_masks(
         case PomapNode():
             for child in node.children:
                 yield from _collect_masks(child, label_context, train_mask, validation_mask, test_mask)
-        
+
 
 def _fit(
         node: PomapNode,

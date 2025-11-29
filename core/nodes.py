@@ -92,7 +92,7 @@ class LearnsFrom(PomapNode):
 
     @property
     def children(self) -> Iterable["PomapNode"]:
-        return [self.learner, self.learns_from]
+        return [self.learns_from, self.learner]
 
     @property
     def tree_repr(self) -> str:
