@@ -12,6 +12,14 @@ dependencies = [
     "immutables",
 ]
 
+[tool.uv]
+dev-dependencies = [
+    "ipykernel",
+    "jupyter",
+    "jupyterlab",
+    "nbstripout"
+]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
