@@ -6,14 +6,12 @@ from typing import Iterable, Optional, Callable, Protocol, runtime_checkable
 
 @runtime_checkable
 class ModelProtocol(Protocol):
-
     def fit(self, df): ...
 
     def predict(self, df): ...
 
 
 class PomapNode(ABC):
-
     name: str
 
     @property

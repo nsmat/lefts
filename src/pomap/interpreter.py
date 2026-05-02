@@ -179,9 +179,7 @@ def _collect_masks(
             validation_filter=validation_mask_for_label,
             test_filter=test_mask_for_label,
         ):
-
             for atomic in values:
-
                 next_label_context = {name: atomic, **label_context}
 
                 lift_train_mask = train_mask_for_label(atomic)
@@ -234,7 +232,6 @@ def _fit(
         precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in precomputed_masks}
 
     match node:
-
         case Leaf(label=label, factory=factory):
             # Note: it is safe to use the passed hyperparameters
             # Without further filtering on label, because the hyperparameters
@@ -282,7 +279,6 @@ def _fit(
             fitted_models[model_label] = model
 
         case Lift(child=child, values=values, name=name):
-
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift values
             # Filtering appropriately based on each value.
@@ -312,7 +308,6 @@ def _fit(
         case LearnsFrom(
             learner=learner, learns_from=learns_from, learn_logic=learn_logic
         ):
-
             source_models, learned_hyperparameters = _fit(
                 learns_from,
                 df,
