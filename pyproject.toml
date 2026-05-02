@@ -11,6 +11,8 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = [
+    "pytest",
+    "ruff",
     "ipykernel",
     "jupyter",
     "jupyterlab",

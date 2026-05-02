@@ -5,3 +5,5 @@
 *.egg-info/
 .venv/
 .pytest_cache/
+CLAUDE.md
+.claude

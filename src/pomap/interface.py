@@ -23,7 +23,7 @@ class Model(_Model):
         return _collect_labels(self.root)
 
 
-def ready(model_constructor: Callable[..., Any], label: str) -> Model:
+def leaf(model_constructor: Callable[..., Any], label: str) -> Model:
     leaf_node = Leaf(label=label, factory=model_constructor)
     return Model(leaf_node)
 
