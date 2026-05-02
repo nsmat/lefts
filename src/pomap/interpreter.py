@@ -49,10 +49,10 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
         case Leaf(label=l):
             yield Label(leaf=l, **label_context)
 
-        case Lift(child=child, atomics=atomics, name=name):
+        case Lift(child=child, values=values, name=name):
             # Under a lift, we will take the cartesian product
-            # Of the existing labels with the lift atomics
-            for atomic in atomics:
+            # Of the existing labels with the lift values
+            for atomic in values:
                 extended_label_context = label_context | {name: atomic}
                 yield from _collect_labels(child, extended_label_context)
 
@@ -174,13 +174,13 @@ def _collect_masks(
         case Lift(
             child=child,
             name=name,
-            atomics=atomics,
+            values=values,
             train_filter=train_mask_for_label,
             validation_filter=validation_mask_for_label,
             test_filter=test_mask_for_label,
         ):
 
-            for atomic in atomics:
+            for atomic in values:
 
                 next_label_context = {name: atomic, **label_context}
 
@@ -281,12 +281,12 @@ def _fit(
 
             fitted_models[model_label] = model
 
-        case Lift(child=child, atomics=atomics, name=name):
+        case Lift(child=child, values=values, name=name):
 
             # Under a lift, we will take the cartesian product
-            # Of the existing labels with the lift atomics
-            # Filtering appropriately based on each label.
-            for atomic in atomics:
+            # Of the existing labels with the lift values
+            # Filtering appropriately based on each value.
+            for atomic in values:
                 extended_label_context = {**label_context, name: atomic}
 
                 child_models, child_hyperparameters = _fit(
