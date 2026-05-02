@@ -54,5 +54,5 @@ TODO: write this
 Pomap imposes some constraints on model interfaces.
 - All hyperparameters are passed as arguments to the fit method.
 - We expect that data is passed to fit and predict as Polars dataframes.
-- The predict method returns a Polars Series as output.
+- The predict method returns an iterable, with the order of predictions matching the order on the input training data frame.
 

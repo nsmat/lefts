@@ -2,9 +2,9 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from src.pomap import Label
-from src.pomap import Lift, Leaf, Ensemble
-from src.pomap import _collect_labels, _fit, _predict
+from src.pomap.label import Label
+from src.pomap.nodes import Lift, Leaf, Ensemble
+from src.pomap.interpreter import _collect_labels, _fit, _predict
 
 
 @pytest.fixture
@@ -60,9 +60,9 @@ def lift_x(model_x):
     return Lift(
         name="category",
         child=model_x,
-        atomics=["a", "b", "c"],
-        train_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
-        test_mask_for_label=lambda atomic: pl.col("category") == pl.lit(atomic),
+        values=["a", "b", "c"],
+        train_filter=lambda atomic: pl.col("category") == pl.lit(atomic),
+        test_filter=lambda atomic: pl.col("category") == pl.lit(atomic),
     )
 
 
@@ -118,3 +118,4 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
 
 
 # TODO add a test for LearnsFrom
+# TODO add tests for the interface, or modify these to use that instead.

@@ -30,19 +30,19 @@ def leaf(model_constructor: Callable[..., Any], label: str) -> Model:
 
 def lift(
     model: Model,
-    atomics,
+    values,
     name,
-    train_mask_for_label,
-    test_mask_for_label,
-    validation_mask_for_label=None,
+    train_filter,
+    test_filter,
+    validation_filter=None,
 ) -> Model:
     lifted = Lift(
         child=model.root,
-        atomics=atomics,
+        values=values,
         name=name,
-        train_mask_for_label=train_mask_for_label,
-        test_mask_for_label=test_mask_for_label,
-        validation_mask_for_label=validation_mask_for_label,
+        train_filter=train_filter,
+        test_filter=test_filter,
+        validation_filter=validation_filter,
     )
 
     return Model(lifted)

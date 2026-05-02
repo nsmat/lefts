@@ -49,13 +49,13 @@ class Leaf(PomapNode):
 class Lift(PomapNode):
     name: str
     child: PomapNode
-    atomics: Iterable[DataType]
-    train_mask_for_label: Callable[[DataType], Expr]
-    test_mask_for_label: Callable[[DataType], Expr]
-    validation_mask_for_label: Callable[[DataType], Expr] = None
+    values: Iterable[DataType]
+    train_filter: Callable[[DataType], Expr]
+    test_filter: Callable[[DataType], Expr]
+    validation_filter: Callable[[DataType], Expr] = None
 
     def __post_init__(self):
-        self.atomics = set(self.atomics)
+        self.values = set(self.values)
 
     @property
     def children(self) -> Iterable["PomapNode"]:
@@ -63,7 +63,7 @@ class Lift(PomapNode):
 
     @property
     def tree_repr(self) -> str:
-        return f"{self.name}: {self.atomics}"
+        return f"{self.name}: {self.values}"
 
 
 @dataclass

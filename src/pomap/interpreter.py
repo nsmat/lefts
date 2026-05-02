@@ -80,7 +80,7 @@ def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Dat
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(child=child, name=name, train_mask_for_label=train_mask_for_label):
+        case Lift(child=child, name=name, train_filter=train_mask_for_label):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
@@ -115,7 +115,7 @@ def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> Data
         case Leaf() | LearnsFrom():
             return df
 
-        case Lift(child=child, name=name, test_mask_for_label=test_mask_for_label):
+        case Lift(child=child, name=name, test_filter=test_mask_for_label):
             # In a lift, we apply the mask specified in the lift
             # To the train df returned by the child
 
@@ -175,9 +175,9 @@ def _collect_masks(
             child=child,
             name=name,
             atomics=atomics,
-            train_mask_for_label=train_mask_for_label,
-            validation_mask_for_label=validation_mask_for_label,
-            test_mask_for_label=test_mask_for_label,
+            train_filter=train_mask_for_label,
+            validation_filter=validation_mask_for_label,
+            test_filter=test_mask_for_label,
         ):
 
             for atomic in atomics:
