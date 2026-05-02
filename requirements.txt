@@ -1,4 +1,0 @@
-polars~=1.24.0
-numpy~=2.2.3
-setuptools~=68.2.0
-immutables

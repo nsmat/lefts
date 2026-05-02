@@ -2,9 +2,9 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from core.label import Label
-from core.nodes import Lift, Leaf, Ensemble
-from core.interpreter import _collect_labels, _fit, _predict
+from src.core import Label
+from src.core import Lift, Leaf, Ensemble
+from src.core import _collect_labels, _fit, _predict
 
 
 @pytest.fixture
