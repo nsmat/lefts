@@ -95,3 +95,19 @@ class LearnsFrom(PomapNode):
     @property
     def tree_repr(self) -> str:
         return f"LearnsFrom: {self.name}"
+
+
+@dataclass
+class Feed(PomapNode):
+    name: str
+    source: PomapNode
+    consumer: PomapNode
+    feature_name: str
+
+    @property
+    def children(self) -> Iterable["PomapNode"]:
+        return [self.source, self.consumer]
+
+    @property
+    def tree_repr(self) -> str:
+        return f"Feed: {self.name}"

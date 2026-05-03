@@ -1,4 +1,4 @@
-from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom
+from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom, Feed
 from typing import Iterator, Tuple, Any, Optional
 from polars import DataFrame, Series, Expr, lit
 from dataclasses import dataclass
@@ -33,7 +33,6 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
     return "\n".join(lines)
 
 
-
 def _validate_tree(node: PomapNode, observed_names=None):
     # TODO add namespace checking. Need to check both types and namespaces
     ...
@@ -53,7 +52,7 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
                 extended_label_context = label_context | {name: value}
                 yield from _collect_labels(child, extended_label_context)
 
-        case Ensemble() | LearnsFrom():
+        case Ensemble() | LearnsFrom() | Feed():
             for child in node.children:
                 yield from _collect_labels(child, label_context)
 
@@ -61,8 +60,6 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
             raise NotImplementedError(
                 f"Not implemented for node type {node.__class__.__name__}"
             )
-
-
 
 
 @dataclass
@@ -252,6 +249,22 @@ def _fit(
 
             fitted_models |= source_models | learner_models
             output_hyperparameters |= learner_hyperparameters | learned_hyperparameters
+
+        case Feed(source=source, consumer=consumer):
+            source_models, source_hyperparameters = _fit(source, df)
+            source_model = _Model(source, source_models, source_hyperparameters)
+            augmented_df = source_model.predict(df)
+
+            consumer_models, consumer_hyperparameters = _fit(
+                consumer,
+                augmented_df,
+                hyperparameters,
+                label_context,
+                False,
+                precomputed_masks,
+            )
+            fitted_models |= source_models | consumer_models
+            output_hyperparameters |= source_hyperparameters | consumer_hyperparameters
 
         case _:
             raise ValueError(f"Unknown node type {type(node)}")

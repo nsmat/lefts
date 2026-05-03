@@ -1,7 +1,7 @@
 from .interpreter import _Model, _fit, _print_tree, _collect_labels
 from dataclasses import dataclass
 from polars import DataFrame
-from .nodes import Lift, Ensemble, LearnsFrom, Leaf
+from .nodes import Lift, Ensemble, LearnsFrom, Leaf, Feed
 from typing import Callable, Iterable, Any
 
 
@@ -60,5 +60,11 @@ def learn_from(
     node = LearnsFrom(
         name=name, learner=learner.root, learns_from=learns_from.root, learn_logic=logic
     )
+
+    return Model(node)
+
+
+def feeds(name: str, source: Model, consumer: Model) -> Model:
+    node = Feed(name=name, source=source.root, consumer=consumer.root)
 
     return Model(node)
