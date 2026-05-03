@@ -102,7 +102,6 @@ class Feed(PomapNode):
     name: str
     source: PomapNode
     consumer: PomapNode
-    feature_name: str
 
     @property
     def children(self) -> Iterable["PomapNode"]:

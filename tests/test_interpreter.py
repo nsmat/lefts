@@ -2,7 +2,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Ensemble, LearnsFrom
+from pomap.nodes import Lift, Leaf, Ensemble, LearnsFrom, Feed
 from pomap.interpreter import _collect_labels, _fit, _predict
 
 
@@ -186,3 +186,72 @@ def test_predict_learns_from(learns_from_node, test_dataframe):
 
     assert (predictions["source"] == 8.0).all()
     assert (predictions["learner"] == 16.0).all()
+
+
+@dataclass
+class ConsumerModel:
+    """Trains on a named column produced by a source model."""
+    source_col: str
+    value: float = None
+
+    def fit(self, training_set: pl.DataFrame):
+        self.value = training_set[self.source_col].mean()
+
+    def predict(self, df: pl.DataFrame):
+        return [self.value] * len(df)
+
+
+@pytest.fixture
+def feed_node():
+    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
+    consumer_leaf = Leaf(label="consumer", factory=lambda: ConsumerModel(source_col="source"))
+    return Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
+
+
+def test_labels_feed(feed_node):
+    assert set(_collect_labels(feed_node)) == {"source", "consumer"}
+
+
+def test_fit_feed(feed_node, test_dataframe):
+    models, _ = _fit(feed_node, test_dataframe)
+
+    # source trains on all x: mean = 8.0
+    assert models["source"].value == 8.0
+    # consumer trains on the augmented df where the "source" column is 8.0 everywhere
+    assert models["consumer"].value == 8.0
+
+
+def test_predict_feed(feed_node, test_dataframe):
+    models, _ = _fit(feed_node, test_dataframe)
+    predictions = _predict(feed_node, models, test_dataframe)
+
+    assert (predictions["source"] == 8.0).all()
+    assert (predictions["consumer"] == 8.0).all()
+
+
+def test_fit_feed_augmentation_is_used(test_dataframe):
+    # Verifies that the consumer actually receives the source column during training.
+    # Source predicts the mean of x (8.0). Consumer sums the means of x and source,
+    # so consumer.value should be 16.0 — only achievable if the source column was present.
+    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
+    consumer_leaf = Leaf(
+        label="consumer",
+        factory=lambda: ConsumerModel(source_col="source"),
+    )
+
+    # Patch ConsumerModel to sum x mean + source mean to make augmentation observable
+    @dataclass
+    class SummingConsumer:
+        value: float = None
+        def fit(self, training_set: pl.DataFrame):
+            self.value = training_set["x"].mean() + training_set["source"].mean()
+        def predict(self, df: pl.DataFrame):
+            return [self.value] * len(df)
+
+    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
+    consumer_leaf = Leaf(label="consumer", factory=lambda: SummingConsumer())
+    node = Feed(name="test", source=source_leaf, consumer=consumer_leaf)
+
+    models, _ = _fit(node, test_dataframe)
+    # x mean = 8.0, source prediction mean = 8.0, so consumer.value = 16.0
+    assert models["consumer"].value == 16.0

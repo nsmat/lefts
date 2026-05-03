@@ -64,7 +64,7 @@ def learn_from(
     return Model(node)
 
 
-def feeds(name: str, source: Model, consumer: Model) -> Model:
+def feed(name: str, source: Model, consumer: Model) -> Model:
     node = Feed(name=name, source=source.root, consumer=consumer.root)
 
     return Model(node)
