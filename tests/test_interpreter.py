@@ -2,8 +2,8 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from src.pomap.nodes import Lift, Leaf, Ensemble
-from src.pomap.interpreter import _collect_labels, _fit, _predict
+from pomap.nodes import Lift, Leaf, Ensemble
+from pomap.interpreter import _collect_labels, _fit, _predict
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def test_dataframe():
 
 
 @dataclass
-class TestModel:
+class MockModel:
     x_column: str
     value = None
 
@@ -38,7 +38,7 @@ def leaf_factory():
 
     def _make_leaf(x_column: str):
         return Leaf(
-            label=f"model-{x_column}", factory=lambda: TestModel(x_column=x_column)
+            label=f"model-{x_column}", factory=lambda: MockModel(x_column=x_column)
         )
 
     return _make_leaf
@@ -134,4 +134,5 @@ def test_fit_double_lift(model_x, test_dataframe):
         test_filter=lambda v: pl.col("category") == pl.lit(v),
     )
     models, _ = _fit(outer, test_dataframe)
+    assert set(models.keys()) == set(_collect_labels(outer))
     assert "model-x[category=a, sign=pos]" in models
