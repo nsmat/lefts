@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from polars import DataFrame
 from .nodes import Lift, Ensemble, LearnsFrom, Leaf
 from typing import Callable, Iterable, Any
-from .label import Label
 
 
 @dataclass
@@ -19,7 +18,7 @@ class Model(_Model):
     def view_labels_dataframe(self) -> DataFrame:
         raise NotImplemented()
 
-    def collect_labels(self) -> Iterable[Label]:
+    def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
 
 

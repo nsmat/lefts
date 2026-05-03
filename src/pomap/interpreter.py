@@ -1,9 +1,15 @@
 from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom
 from typing import Iterator, Tuple, Any, Optional
-from .label import Label
 from polars import DataFrame, Series, Expr, lit
 from dataclasses import dataclass
 from inspect import signature
+
+
+def _make_label(leaf_name: str, label_context: dict) -> str:
+    if not label_context:
+        return leaf_name
+    dims = ", ".join(f"{k}={v}" for k, v in label_context.items())
+    return f"{leaf_name}[{dims}]"
 
 
 def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
@@ -27,12 +33,12 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
     return "\n".join(lines)
 
 
-def _mark_in_train_data_for_label(node: PomapNode, df: DataFrame, label: Label):
+def _mark_in_train_data_for_label(node: PomapNode, df: DataFrame, label: str):
     # TODO
     ...
 
 
-def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: Label):
+def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: str):
     # TODO
     ...
 
@@ -42,12 +48,12 @@ def _validate_tree(node: PomapNode, observed_names=None):
     ...
 
 
-def _collect_labels(node: PomapNode, label_context=None) -> Iterator[Label]:
+def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
     label_context = label_context or {}
 
     match node:
         case Leaf(label=l):
-            yield Label(leaf=l, **label_context)
+            yield _make_label(l, label_context)
 
         case Lift(child=child, values=values, name=name):
             # Under a lift, we will take the cartesian product
@@ -75,70 +81,6 @@ def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
                 yield from _collect_leaves(child)
 
 
-def _get_train_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> DataFrame:
-    match node:
-        case Leaf() | LearnsFrom():
-            return df
-
-        case Lift(child=child, name=name, train_filter=train_mask_for_label):
-            # In a lift, we apply the mask specified in the lift
-            # To the train df returned by the child
-
-            # First, we split the label into the part that's relevant for the lift
-            # and the part that is relevant for the rest of the tree.
-            lift_label, child_label = label[name], label.drop(name)
-            mask_expr = train_mask_for_label(lift_label)
-            return _get_train_df_for_label(child, df, label=child_label).filter(
-                mask_expr
-            )
-
-        case Ensemble(models):
-            # In an ensemble, we just pass through the dataframe
-            # from the appropriate child. The correct child is the one
-            # That matches the label.
-            for child in models:
-                if label in _collect_labels(child):
-                    return _get_train_df_for_label(child, df, label=label)
-            raise ValueError(f"Label {label} not present in model labels")
-
-        case _:
-            raise NotImplementedError(
-                f"Not implemented for node type {node.__class__.__name__}"
-            )
-
-
-def _get_test_df_for_label(node: PomapNode, df: DataFrame, label: Label) -> DataFrame:
-    match node:
-        case Leaf():
-            return df
-
-        case Leaf() | LearnsFrom():
-            return df
-
-        case Lift(child=child, name=name, test_filter=test_mask_for_label):
-            # In a lift, we apply the mask specified in the lift
-            # To the train df returned by the child
-
-            # First, we plit the label into the part that's relevant for the lift
-            # and the part that is relevant for the rest of the tree.
-            lift_label, child_label = label[name], label.drop(name)
-            mask_expr = test_mask_for_label(lift_label)
-            return _get_test_df_for_label(child, df, label=child_label).filter(
-                mask_expr
-            )
-
-        case Ensemble(models=models):
-            # In an ensemble, we just pass through the dataframe
-            # from the appropriate child. The correct child is the one
-            # That matches the label.
-            for child in models:
-                if label in _collect_labels(child):
-                    return _get_test_df_for_label(child, df, label=label)
-
-        case _:
-            raise NotImplementedError(
-                f"Not implemented for node type {node.__class__.__name__}"
-            )
 
 
 @dataclass
@@ -168,7 +110,7 @@ def _collect_masks(
 
     match node:
         case Leaf(label=leaf_label):
-            full_label = Label(leaf=leaf_label, **label_context)
+            full_label = _make_label(leaf_label, label_context)
             yield full_label, train_mask, validation_mask, test_mask
 
         case Lift(
@@ -180,7 +122,7 @@ def _collect_masks(
             test_filter=test_mask_for_label,
         ):
             for atomic in values:
-                next_label_context = {name: atomic, **label_context}
+                next_label_context = {**label_context, name: atomic}
 
                 lift_train_mask = train_mask_for_label(atomic)
                 next_train_mask = lift_train_mask & train_mask
@@ -218,13 +160,13 @@ def _fit(
     label_context: dict = None,
     is_root=True,
     precomputed_masks: dict = None,
-) -> Tuple[dict[Label, Any], dict[str, Any]]:
+) -> Tuple[dict[str, Any], dict[str, Any]]:
 
     label_context = label_context or dict()
     hyperparameters = hyperparameters or dict()
 
     # Define output types
-    fitted_models: dict[Label, Any] = {}
+    fitted_models: dict[str, Any] = {}
     output_hyperparameters: dict[str, Any] = {}
 
     if is_root:
@@ -238,7 +180,7 @@ def _fit(
             # Are passed from a LearnsFrom to every node beneath them in the tree.
 
             model = factory(**hyperparameters)
-            model_label = Label(leaf=label, **label_context)
+            model_label = _make_label(label, label_context)
 
             train_mask = precomputed_masks[model_label][0]
             validation_mask = precomputed_masks[model_label][1]
@@ -344,16 +286,19 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
 
     df = df.with_row_index(name="__pomap_row_index")
 
-    labels = _collect_labels(node)
-    for label in labels:
-        test_df = _get_test_df_for_label(node, df, label)
+    # Reuse precomputed masks so each leaf gets the correct test slice
+    # without re-traversing the tree per label.
+    precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in _collect_masks(node)}
+
+    for label, (_train_mask, _validation_mask, test_mask) in precomputed_masks.items():
+        test_df = df.filter(test_mask)
         predictions = models[label].predict(test_df)
-        predictions = Series(name=label.column(), values=predictions)
+        predictions = Series(name=label, values=predictions)
 
         test_df = test_df.with_columns(predictions)
 
         df = df.join(
-            test_df.select("__pomap_row_index", label.column()),
+            test_df.select("__pomap_row_index", label),
             on="__pomap_row_index",
             coalesce=True,
             how="left",

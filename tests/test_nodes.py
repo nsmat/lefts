@@ -2,7 +2,6 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from src.pomap.label import Label
 from src.pomap.nodes import Lift, Leaf, Ensemble
 from src.pomap.interpreter import _collect_labels, _fit, _predict
 
@@ -73,16 +72,16 @@ def ensemble_x1_x2(model_x, model_x2):
 
 def test_labels_lift_x(lift_x):
     expected_labels_x1 = {
-        Label(leaf="model-x", category="a"),
-        Label(leaf="model-x", category="b"),
-        Label(leaf="model-x", category="c"),
+        "model-x[category=a]",
+        "model-x[category=b]",
+        "model-x[category=c]",
     }
 
     assert set(_collect_labels(lift_x)) == expected_labels_x1
 
 
 def test_labels_ensemble(ensemble_x1_x2):
-    expected_labels_ensemble = {Label(leaf="model-x"), Label(leaf="model-x2")}
+    expected_labels_ensemble = {"model-x", "model-x2"}
 
     assert set(_collect_labels(ensemble_x1_x2)) == expected_labels_ensemble
 
@@ -90,9 +89,9 @@ def test_labels_ensemble(ensemble_x1_x2):
 def test_fit_lift_x(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
 
-    assert models[Label(leaf="model-x", category="a")].value == 3
-    assert models[Label(leaf="model-x", category="b")].value == 15
-    assert models[Label(leaf="model-x", category="c")].value == 6
+    assert models["model-x[category=a]"].value == 3
+    assert models["model-x[category=b]"].value == 15
+    assert models["model-x[category=c]"].value == 6
 
 
 def test_predict_lift_x(lift_x, test_dataframe):
@@ -101,9 +100,7 @@ def test_predict_lift_x(lift_x, test_dataframe):
 
     expected = {"a": 3, "b": 15, "c": 6}
     for cat in ["a", "b", "c"]:
-        unique = predictions.filter(category=cat)[
-            Label(leaf="model-x", category=cat).column()
-        ].unique()
+        unique = predictions.filter(category=cat)[f"model-x[category={cat}]"].unique()
         assert unique.shape[0] == 1
         assert unique.item(0) == expected[cat]
 
@@ -113,8 +110,29 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
 
     predictions = _predict(ensemble_x1_x2, models, test_dataframe)
 
-    assert (predictions[Label(leaf="model-x").column()] == 8.0).all()
-    assert (predictions[Label(leaf="model-x2").column()] == -8.0).all()
+    assert (predictions["model-x"] == 8.0).all()
+    assert (predictions["model-x2"] == -8.0).all()
+
+
+def test_fit_double_lift(model_x, test_dataframe):
+    # Two nested lifts — guards against label_context ordering inconsistency
+    # between _collect_masks and _fit that would cause a KeyError.
+    inner = Lift(
+        name="sign",
+        child=model_x,
+        values=["pos"],
+        train_filter=lambda v: pl.col("x") > 0,
+        test_filter=lambda v: pl.col("x") > 0,
+    )
+    outer = Lift(
+        name="category",
+        child=inner,
+        values=["a"],
+        train_filter=lambda v: pl.col("category") == pl.lit(v),
+        test_filter=lambda v: pl.col("category") == pl.lit(v),
+    )
+    models, _ = _fit(outer, test_dataframe)
+    assert "model-x[category=a, sign=pos]" in models
 
 
 # TODO add a test for LearnsFrom
