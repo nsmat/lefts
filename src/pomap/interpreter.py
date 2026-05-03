@@ -26,21 +26,12 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
     else:
         lines = [f"{prefix}└── {node.tree_repr}"]
 
-    for i, child in enumerate(node.children):
+    for child in node.children:
         next_prefix = prefix + "    "
         lines.append(_print_tree(child, next_prefix, is_root=False))
 
     return "\n".join(lines)
 
-
-def _mark_in_train_data_for_label(node: PomapNode, df: DataFrame, label: str):
-    # TODO
-    ...
-
-
-def _mark_in_test_data_for_label(node: PomapNode, df: DataFrame, label: str):
-    # TODO
-    ...
 
 
 def _validate_tree(node: PomapNode, observed_names=None):
@@ -58,8 +49,8 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
         case Lift(child=child, values=values, name=name):
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift values
-            for atomic in values:
-                extended_label_context = label_context | {name: atomic}
+            for value in values:
+                extended_label_context = label_context | {name: value}
                 yield from _collect_labels(child, extended_label_context)
 
         case Ensemble() | LearnsFrom():
@@ -70,15 +61,6 @@ def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
             raise NotImplementedError(
                 f"Not implemented for node type {node.__class__.__name__}"
             )
-
-
-def _collect_leaves(node: PomapNode) -> Iterator[Leaf]:
-    match node.children:
-        case []:
-            yield node
-        case children:
-            for child in children:
-                yield from _collect_leaves(child)
 
 
 
@@ -117,24 +99,23 @@ def _collect_masks(
             child=child,
             name=name,
             values=values,
-            train_filter=train_mask_for_label,
-            validation_filter=validation_mask_for_label,
-            test_filter=test_mask_for_label,
+            train_filter=train_filter,
+            validation_filter=validation_filter,
+            test_filter=test_filter,
         ):
-            for atomic in values:
-                next_label_context = {**label_context, name: atomic}
+            for value in values:
+                next_label_context = {**label_context, name: value}
 
-                lift_train_mask = train_mask_for_label(atomic)
+                lift_train_mask = train_filter(value)
                 next_train_mask = lift_train_mask & train_mask
 
-                lift_test_mask = test_mask_for_label(atomic)
+                lift_test_mask = test_filter(value)
                 next_test_mask = lift_test_mask & test_mask
 
-                if validation_mask_for_label is None:
-                    validation_mask_for_label = validation_mask_for_label
+                if validation_filter is None:
                     next_validation_mask = validation_mask
                 else:
-                    next_validation_mask = validation_mask_for_label(atomic)
+                    next_validation_mask = validation_filter(value)
                     if validation_mask is not None:
                         next_validation_mask = next_validation_mask & validation_mask
 
@@ -224,8 +205,8 @@ def _fit(
             # Under a lift, we will take the cartesian product
             # Of the existing labels with the lift values
             # Filtering appropriately based on each value.
-            for atomic in values:
-                extended_label_context = {**label_context, name: atomic}
+            for value in values:
+                extended_label_context = {**label_context, name: value}
 
                 child_models, child_hyperparameters = _fit(
                     child,

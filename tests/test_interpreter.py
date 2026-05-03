@@ -115,8 +115,10 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
 
 
 def test_fit_double_lift(model_x, test_dataframe):
-    # Two nested lifts — guards against label_context ordering inconsistency
-    # between _collect_masks and _fit that would cause a KeyError.
+    """
+    Tests that model labels are well formed after
+    sequential lifts.
+    """
     inner = Lift(
         name="sign",
         child=model_x,
@@ -133,7 +135,3 @@ def test_fit_double_lift(model_x, test_dataframe):
     )
     models, _ = _fit(outer, test_dataframe)
     assert "model-x[category=a, sign=pos]" in models
-
-
-# TODO add a test for LearnsFrom
-# TODO add tests for the interface, or modify these to use that instead.
