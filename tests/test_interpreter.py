@@ -2,7 +2,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Ensemble
+from pomap.nodes import Lift, Leaf, Ensemble, LearnsFrom
 from pomap.interpreter import _collect_labels, _fit, _predict
 
 
@@ -136,3 +136,53 @@ def test_fit_double_lift(model_x, test_dataframe):
     models, _ = _fit(outer, test_dataframe)
     assert set(models.keys()) == set(_collect_labels(outer))
     assert "model-x[category=a, sign=pos]" in models
+
+
+@dataclass
+class OffsetModel:
+    """Predicts the training mean of x plus a fixed offset."""
+
+    offset: float
+    value: float = None
+
+    def fit(self, training_set: pl.DataFrame):
+        self.value = training_set["x"].mean() + self.offset
+
+    def predict(self, df: pl.DataFrame):
+        return [self.value] * df.shape[0]
+
+
+@pytest.fixture
+def learns_from_node():
+    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
+    learner_leaf = Leaf(
+        label="learner",
+        factory=lambda offset=0.0: OffsetModel(offset=offset),
+    )
+
+    def learn_logic(model, df):
+        preds = model.predict(df)
+        return {"offset": preds["source"].mean()}
+
+    return LearnsFrom(
+        name="test",
+        learner=learner_leaf,
+        learns_from=source_leaf,
+        learn_logic=learn_logic,
+    )
+
+
+def test_fit_learns_from(learns_from_node, test_dataframe):
+    models, hyperparameters = _fit(learns_from_node, test_dataframe)
+
+    assert models["source"].value == 8.0
+    assert hyperparameters["offset"] == 8.0
+    assert models["learner"].value == 16.0
+
+
+def test_predict_learns_from(learns_from_node, test_dataframe):
+    models, _ = _fit(learns_from_node, test_dataframe)
+    predictions = _predict(learns_from_node, models, test_dataframe)
+
+    assert (predictions["source"] == 8.0).all()
+    assert (predictions["learner"] == 16.0).all()
