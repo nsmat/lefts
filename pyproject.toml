@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [tool.ruff.lint]
-ignore = ["E731"]
+ignore = ["E731"] # Allows the use of lambdas as variables
 
 [dependency-groups]
 dev  = [
