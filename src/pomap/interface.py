@@ -36,6 +36,7 @@ def lift(
     train_filter,
     test_filter,
     validation_filter=None,
+    aggregate_as=None,
 ) -> Model:
     lifted = Lift(
         child=model.root,
@@ -44,14 +45,15 @@ def lift(
         train_filter=train_filter,
         test_filter=test_filter,
         validation_filter=validation_filter,
+        aggregate_as=aggregate_as,
     )
 
     return Model(lifted)
 
 
-def ensemble(name: str, *models):
+def ensemble(name: str, *models, aggregate_as=None):
     roots = [model.root for model in models]
-    node = Ensemble(name, roots)
+    node = Ensemble(name, roots, aggregate_as=aggregate_as)
 
     return Model(node)
 

@@ -51,6 +51,7 @@ class Lift(PomapNode):
     train_filter: Callable[[DataType], Expr]
     test_filter: Callable[[DataType], Expr]
     validation_filter: Callable[[DataType], Expr] = None
+    aggregate_as: dict[str, Callable[[list[str]], Expr]] | None = None
 
     def __post_init__(self):
         self.values = set(self.values)
@@ -68,6 +69,7 @@ class Lift(PomapNode):
 class Ensemble(PomapNode):
     name: str
     models: Iterable[PomapNode]
+    aggregate_as: dict[str, Callable[[list[str]], Expr]] | None = None
 
     @property
     def children(self):

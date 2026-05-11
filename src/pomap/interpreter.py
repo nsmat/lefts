@@ -272,6 +272,30 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
+def _apply_aggregates(
+    node: PomapNode,
+    df: DataFrame,
+    label_context: dict | None = None,
+) -> DataFrame:
+    label_context = label_context or {}
+
+    match node:
+        case Lift(name=name, values=values, child=child):
+            for value in values:
+                df = _apply_aggregates(child, df, label_context | {name: value})
+        case PomapNode():
+            for child in node.children:
+                df = _apply_aggregates(child, df, label_context)
+
+    if isinstance(node, (Lift, Ensemble)) and node.aggregate_as:
+        child_labels = list(_collect_labels(node, label_context))
+        for new_col, fn in node.aggregate_as.items():
+            full_col = _make_label(new_col, label_context)
+            df = df.with_columns(fn(child_labels).alias(full_col))
+
+    return df
+
+
 def _predict(node: PomapNode, models: dict, df: DataFrame):
     if "__pomap_row_index" in df.columns:
         raise ValueError(
@@ -298,6 +322,7 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
             how="left",
         )
 
+    df = _apply_aggregates(node, df)
     df = df.drop("__pomap_row_index")
 
     return df
