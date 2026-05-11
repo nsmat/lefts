@@ -191,6 +191,7 @@ def test_predict_learns_from(learns_from_node, test_dataframe):
 @dataclass
 class ConsumerModel:
     """Trains on a named column produced by a source model."""
+
     source_col: str
     value: float = None
 
@@ -204,7 +205,9 @@ class ConsumerModel:
 @pytest.fixture
 def feed_node():
     source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
-    consumer_leaf = Leaf(label="consumer", factory=lambda: ConsumerModel(source_col="source"))
+    consumer_leaf = Leaf(
+        label="consumer", factory=lambda: ConsumerModel(source_col="source")
+    )
     return Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
 
 
@@ -243,8 +246,10 @@ def test_fit_feed_augmentation_is_used(test_dataframe):
     @dataclass
     class SummingConsumer:
         value: float = None
+
         def fit(self, training_set: pl.DataFrame):
             self.value = training_set["x"].mean() + training_set["source"].mean()
+
         def predict(self, df: pl.DataFrame):
             return [self.value] * len(df)
 
