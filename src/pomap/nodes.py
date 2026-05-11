@@ -1,7 +1,7 @@
 from polars import DataType, Expr, DataFrame
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Optional, Callable, Protocol, runtime_checkable
+from typing import Iterable, Callable, Protocol, runtime_checkable
 
 
 @runtime_checkable

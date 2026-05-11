@@ -18,7 +18,7 @@ class Model(_Model):
         print(_print_tree(self.root))
 
     def view_labels_dataframe(self) -> DataFrame:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)

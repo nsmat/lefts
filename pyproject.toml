@@ -9,6 +9,9 @@ dependencies = [
     "polars~=1.24.0",
 ]
 
+[tool.ruff.lint]
+ignore = ["E731"]
+
 [dependency-groups]
 dev  = [
     "pytest",
