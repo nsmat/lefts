@@ -1,12 +1,13 @@
 [project]
 name = "pomap"
 version = "0.1.0"
-description = "Add your project description here"
+description = "Composable transformations for model experimentation"
 authors = [
     { name = "Niklas Mather", email = "niksmather@gmail.com" }
 ]
+requires-python = ">=3.10"
 dependencies = [
-    "polars~=1.24.0",
+    "polars",
 ]
 
 [tool.ruff.lint]
