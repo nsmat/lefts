@@ -1,19 +1,17 @@
 from polars import DataType, Expr, DataFrame
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Optional, Callable, Protocol, runtime_checkable
+from typing import Iterable, Callable, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class ModelProtocol(Protocol):
-
     def fit(self, df): ...
 
     def predict(self, df): ...
 
 
 class PomapNode(ABC):
-
     name: str
 
     @property
@@ -49,13 +47,13 @@ class Leaf(PomapNode):
 class Lift(PomapNode):
     name: str
     child: PomapNode
-    atomics: Iterable[DataType]
-    train_mask_for_label: Callable[[DataType], Expr]
-    test_mask_for_label: Callable[[DataType], Expr]
-    validation_mask_for_label: Callable[[DataType], Expr] = None
+    values: Iterable[DataType]
+    train_filter: Callable[[DataType], Expr]
+    test_filter: Callable[[DataType], Expr]
+    validation_filter: Callable[[DataType], Expr] = None
 
     def __post_init__(self):
-        self.atomics = set(self.atomics)
+        self.values = set(self.values)
 
     @property
     def children(self) -> Iterable["PomapNode"]:
@@ -63,7 +61,7 @@ class Lift(PomapNode):
 
     @property
     def tree_repr(self) -> str:
-        return f"{self.name}: {self.atomics}"
+        return f"{self.name}: {self.values}"
 
 
 @dataclass
@@ -97,3 +95,18 @@ class LearnsFrom(PomapNode):
     @property
     def tree_repr(self) -> str:
         return f"LearnsFrom: {self.name}"
+
+
+@dataclass
+class Feed(PomapNode):
+    name: str
+    source: PomapNode
+    consumer: PomapNode
+
+    @property
+    def children(self) -> Iterable["PomapNode"]:
+        return [self.source, self.consumer]
+
+    @property
+    def tree_repr(self) -> str:
+        return f"Feed: {self.name}"

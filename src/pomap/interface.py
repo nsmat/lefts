@@ -1,9 +1,10 @@
-from .interpreter import _Model, _fit, _print_tree, _collect_labels
 from dataclasses import dataclass
+from typing import Any, Callable, Iterable
+
 from polars import DataFrame
-from .nodes import Lift, Ensemble, LearnsFrom, Leaf
-from typing import Callable, Iterable, Any
-from .label import Label
+
+from .interpreter import _collect_labels, _fit, _Model, _print_tree
+from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift
 
 
 @dataclass
@@ -17,32 +18,32 @@ class Model(_Model):
         print(_print_tree(self.root))
 
     def view_labels_dataframe(self) -> DataFrame:
-        raise NotImplemented()
+        raise NotImplementedError()
 
-    def collect_labels(self) -> Iterable[Label]:
+    def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
 
 
-def ready(model_constructor: Callable[..., Any], label: str) -> Model:
+def leaf(model_constructor: Callable[..., Any], label: str) -> Model:
     leaf_node = Leaf(label=label, factory=model_constructor)
     return Model(leaf_node)
 
 
 def lift(
     model: Model,
-    atomics,
+    values,
     name,
-    train_mask_for_label,
-    test_mask_for_label,
-    validation_mask_for_label=None,
+    train_filter,
+    test_filter,
+    validation_filter=None,
 ) -> Model:
     lifted = Lift(
         child=model.root,
-        atomics=atomics,
+        values=values,
         name=name,
-        train_mask_for_label=train_mask_for_label,
-        test_mask_for_label=test_mask_for_label,
-        validation_mask_for_label=validation_mask_for_label,
+        train_filter=train_filter,
+        test_filter=test_filter,
+        validation_filter=validation_filter,
     )
 
     return Model(lifted)
@@ -61,5 +62,11 @@ def learn_from(
     node = LearnsFrom(
         name=name, learner=learner.root, learns_from=learns_from.root, learn_logic=logic
     )
+
+    return Model(node)
+
+
+def feed(name: str, source: Model, consumer: Model) -> Model:
+    node = Feed(name=name, source=source.root, consumer=consumer.root)
 
     return Model(node)
