@@ -1,8 +1,10 @@
-from .interpreter import _Model, _fit, _print_tree, _collect_labels
 from dataclasses import dataclass
+from typing import Any, Callable, Iterable
+
 from polars import DataFrame
-from .nodes import Lift, Ensemble, LearnsFrom, Leaf, Feed
-from typing import Callable, Iterable, Any
+
+from .interpreter import _collect_labels, _fit, _Model, _print_tree
+from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift
 
 
 @dataclass
