@@ -40,6 +40,8 @@ def _collect_labels(
 
     match node:
         case Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn) if fn is not None:
+            # In the case where we have an aggregation function, we
+            # halt because all child labels will be pulled into the aggregated column
             yield _make_label(node.name, label_context)
         case Leaf(label=label):
             yield _make_label(label, label_context)
