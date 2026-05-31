@@ -3,7 +3,7 @@ from typing import Any, Callable, Iterable
 
 from polars import DataFrame
 
-from .interpreter import _collect_labels, _fit, _Model, _print_tree
+from .interpreter import _fit, _Model, _print_tree, _collect_labels
 from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift
 
 
@@ -36,6 +36,7 @@ def lift(
     train_filter,
     test_filter,
     validation_filter=None,
+    aggregate_with=None,
 ) -> Model:
     lifted = Lift(
         child=model.root,
@@ -44,14 +45,15 @@ def lift(
         train_filter=train_filter,
         test_filter=test_filter,
         validation_filter=validation_filter,
+        aggregate_with=aggregate_with,
     )
 
     return Model(lifted)
 
 
-def ensemble(name: str, *models):
+def ensemble(name: str, *models, aggregate_with=None):
     roots = [model.root for model in models]
-    node = Ensemble(name, roots)
+    node = Ensemble(name, roots, aggregate_with=aggregate_with)
 
     return Model(node)
 

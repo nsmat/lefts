@@ -7,3 +7,4 @@
 .pytest_cache/
 CLAUDE.md
 .claude
+.ruff_cache

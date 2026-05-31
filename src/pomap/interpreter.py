@@ -33,33 +33,24 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
     return "\n".join(lines)
 
 
-def _validate_tree(node: PomapNode, observed_names=None):
-    # TODO add namespace checking. Need to check both types and namespaces
-    ...
-
-
-def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
+def _collect_labels(
+    node: PomapNode, label_context: dict | None = None
+) -> Iterator[str]:
     label_context = label_context or {}
 
     match node:
-        case Leaf(label=l):
-            yield _make_label(l, label_context)
-
-        case Lift(child=child, values=values, name=name):
-            # Under a lift, we will take the cartesian product
-            # Of the existing labels with the lift values
+        case Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn) if fn is not None:
+            # In the case where we have an aggregation function, we
+            # halt because all child labels will be pulled into the aggregated column
+            yield _make_label(node.name, label_context)
+        case Leaf(label=label):
+            yield _make_label(label, label_context)
+        case Lift(child=child, name=name, values=values):
             for value in values:
-                extended_label_context = label_context | {name: value}
-                yield from _collect_labels(child, extended_label_context)
-
-        case Ensemble() | LearnsFrom() | Feed():
+                yield from _collect_labels(child, label_context | {name: value})
+        case PomapNode():
             for child in node.children:
                 yield from _collect_labels(child, label_context)
-
-        case _:
-            raise NotImplementedError(
-                f"Not implemented for node type {node.__class__.__name__}"
-            )
 
 
 @dataclass
@@ -272,6 +263,50 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
+def _get_aggregation_input_columns(
+    node: PomapNode, label_context: dict
+) -> Iterator[str]:
+    match node:
+        case Lift(child=child, name=name, values=values):
+            for value in values:
+                yield from _collect_labels(child, label_context | {name: value})
+        case Ensemble():
+            for child in node.children:
+                yield from _collect_labels(child, label_context)
+
+
+def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame:
+    input_cols = list(_get_aggregation_input_columns(node, label_context))
+    full_col = _make_label(node.name, label_context)
+    df = df.with_columns(node.aggregate_with(*input_cols).alias(full_col))
+    return df.drop(*input_cols)
+
+
+def _apply_aggregations(
+    node: PomapNode,
+    df: DataFrame,
+    label_context: dict | None = None,
+) -> DataFrame:
+    label_context = label_context or {}
+
+    match node:
+        case Lift(name=name, values=values, child=child, aggregate_with=fn):
+            for value in values:
+                df = _apply_aggregations(child, df, label_context | {name: value})
+            if fn is not None:
+                df = _aggregate(node, df, label_context)
+        case Ensemble(aggregate_with=fn):
+            for child in node.children:
+                df = _apply_aggregations(child, df, label_context)
+            if fn is not None:
+                df = _aggregate(node, df, label_context)
+        case PomapNode():
+            for child in node.children:
+                df = _apply_aggregations(child, df, label_context)
+
+    return df
+
+
 def _predict(node: PomapNode, models: dict, df: DataFrame):
     if "__pomap_row_index" in df.columns:
         raise ValueError(
@@ -280,10 +315,9 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
 
     df = df.with_row_index(name="__pomap_row_index")
 
-    # Reuse precomputed masks so each leaf gets the correct test slice
-    # without re-traversing the tree per label.
     precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in _collect_masks(node)}
 
+    # We compute the full space of output columns first, then apply aggregation post-hoc
     for label, (_train_mask, _validation_mask, test_mask) in precomputed_masks.items():
         test_df = df.filter(test_mask)
         predictions = models[label].predict(test_df)
@@ -298,6 +332,7 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
             how="left",
         )
 
+    df = _apply_aggregations(node, df)
     df = df.drop("__pomap_row_index")
 
     return df

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from pomap.nodes import Lift, Leaf, Ensemble, LearnsFrom, Feed
-from pomap.interpreter import _collect_labels, _fit, _predict
+from pomap.interpreter import _fit, _predict, _collect_labels
 
 
 @pytest.fixture
@@ -114,6 +114,64 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
     assert (predictions["model-x2"] == -8.0).all()
 
 
+def test_predict_ensemble_with_aggregate(model_x, model_x2, test_dataframe):
+    ensemble = Ensemble(
+        name="avg",
+        models=[model_x, model_x2],
+        aggregate_with=pl.mean_horizontal,
+    )
+    models, _ = _fit(ensemble, test_dataframe)
+    predictions = _predict(ensemble, models, test_dataframe)
+
+    assert (predictions["avg"] == 0.0).all()
+    assert "model-x" not in predictions.columns
+    assert "model-x2" not in predictions.columns
+
+
+def test_predict_nested_aggregates(test_dataframe):
+    """Tests that we can operate on the inner columns of an aggregate"""
+    inner_x = Leaf(label="inner-x", factory=lambda: MockModel(x_column="x"))
+    inner_x2 = Leaf(label="inner-x2", factory=lambda: MockModel(x_column="x2"))
+    outer_x = Leaf(label="outer-x", factory=lambda: MockModel(x_column="x"))
+
+    inner = Ensemble(
+        name="inner",
+        models=[inner_x, inner_x2],
+        aggregate_with=pl.mean_horizontal,
+    )
+    outer = Ensemble(
+        name="outer",
+        models=[inner, outer_x],
+        aggregate_with=pl.mean_horizontal,
+    )
+
+    models, _ = _fit(outer, test_dataframe)
+    predictions = _predict(outer, models, test_dataframe)
+
+    assert (predictions["outer"] == 4.0).all()
+    for intermediate in ("inner", "inner-x", "inner-x2", "outer-x"):
+        assert intermediate not in predictions.columns
+
+
+def test_collect_labels_stacked_aggregates(model_x, model_x2):
+    inner = Ensemble(
+        name="inner",
+        models=[model_x, model_x2],
+        aggregate_with=pl.mean_horizontal,
+    )
+    outer = Lift(
+        name="fold",
+        child=inner,
+        values=[1, 2, 3],
+        train_filter=lambda v: pl.lit(True),
+        test_filter=lambda v: pl.lit(True),
+        aggregate_with=pl.mean_horizontal,
+    )
+
+    assert set(_collect_labels(outer)) == {"fold"}
+    assert set(_collect_labels(inner)) == {"inner"}
+
+
 def test_fit_double_lift(model_x, test_dataframe):
     """
     Tests that model labels are well formed after
@@ -134,8 +192,7 @@ def test_fit_double_lift(model_x, test_dataframe):
         test_filter=lambda v: pl.col("category") == pl.lit(v),
     )
     models, _ = _fit(outer, test_dataframe)
-    assert set(models.keys()) == set(_collect_labels(outer))
-    assert "model-x[category=a, sign=pos]" in models
+    assert set(models.keys()) == {"model-x[category=a, sign=pos]"}
 
 
 @dataclass

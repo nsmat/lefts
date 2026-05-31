@@ -14,7 +14,7 @@ Pomap has four commands:
 - Lift: trains multiple copies of a model across different subsets of data.
 - Ensemble: Takes a set of models and makes them evaluate as one.
 - LearnsFrom: Allows a model to learn its hyperparameters from another.
-- Feeds (not implemented): Allows the output of one model to be used as a feature by another.
+- Feeds: Allows the output of one model to be used as a feature by another.
 
 ## Examples
 TODO: move these to an API specification? Or just link to a tutorial?

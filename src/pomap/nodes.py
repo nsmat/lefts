@@ -1,7 +1,8 @@
-from polars import DataType, Expr, DataFrame
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Callable, Protocol, runtime_checkable
+from typing import Callable, Iterable, Protocol, runtime_checkable
+
+from polars import DataFrame, DataType, Expr
 
 
 @runtime_checkable
@@ -50,7 +51,8 @@ class Lift(PomapNode):
     values: Iterable[DataType]
     train_filter: Callable[[DataType], Expr]
     test_filter: Callable[[DataType], Expr]
-    validation_filter: Callable[[DataType], Expr] = None
+    validation_filter: Callable[[DataType], Expr] | None = None
+    aggregate_with: Callable[..., Expr] | None = None
 
     def __post_init__(self):
         self.values = set(self.values)
@@ -68,6 +70,7 @@ class Lift(PomapNode):
 class Ensemble(PomapNode):
     name: str
     models: Iterable[PomapNode]
+    aggregate_with: Callable[..., Expr] | None = None
 
     @property
     def children(self):
