@@ -38,6 +38,32 @@ def _validate_tree(node: PomapNode, observed_names=None):
     ...
 
 
+def _collect_labels(
+    node: PomapNode,
+    label_context: dict | None = None,
+    ignore_root_aggregate: bool = False,
+) -> Iterator[str]:
+    label_context = label_context or {}
+
+    if (
+        not ignore_root_aggregate
+        and isinstance(node, (Lift, Ensemble))
+        and node.aggregate_with
+    ):
+        yield _make_label(node.name, label_context)
+        return
+
+    match node:
+        case Leaf(label=label):
+            yield _make_label(label, label_context)
+        case Lift(child=child, name=name, values=values):
+            for value in values:
+                yield from _collect_labels(child, label_context | {name: value})
+        case PomapNode():
+            for child in node.children:
+                yield from _collect_labels(child, label_context)
+
+
 @dataclass
 class _Model:
     root: PomapNode
@@ -246,32 +272,6 @@ def _fit(
             raise ValueError(f"Unknown node type {type(node)}")
 
     return fitted_models, output_hyperparameters
-
-
-def _collect_labels(
-    node: PomapNode,
-    label_context: dict | None = None,
-    ignore_root_aggregate: bool = False,
-) -> Iterator[str]:
-    label_context = label_context or {}
-
-    if (
-        not ignore_root_aggregate
-        and isinstance(node, (Lift, Ensemble))
-        and node.aggregate_with
-    ):
-        yield _make_label(node.name, label_context)
-        return
-
-    match node:
-        case Leaf(label=label):
-            yield _make_label(label, label_context)
-        case Lift(child=child, name=name, values=values):
-            for value in values:
-                yield from _collect_labels(child, label_context | {name: value})
-        case PomapNode():
-            for child in node.children:
-                yield from _collect_labels(child, label_context)
 
 
 def _apply_aggregates(
