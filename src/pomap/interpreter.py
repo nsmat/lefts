@@ -287,9 +287,9 @@ def _apply_aggregates(
             for child in node.children:
                 df = _apply_aggregates(child, df, label_context)
 
-    if isinstance(node, (Lift, Ensemble)) and node.aggregate_as:
+    if isinstance(node, (Lift, Ensemble)) and node.aggregate_with:
         child_labels = list(_collect_labels(node, label_context))
-        for new_col, fn in node.aggregate_as.items():
+        for new_col, fn in node.aggregate_with.items():
             full_col = _make_label(new_col, label_context)
             df = df.with_columns(fn(child_labels).alias(full_col))
 
