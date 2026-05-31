@@ -34,21 +34,13 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
 
 
 def _collect_labels(
-    node: PomapNode,
-    label_context: dict | None = None,
-    ignore_root_aggregate: bool = False,
+    node: PomapNode, label_context: dict | None = None
 ) -> Iterator[str]:
     label_context = label_context or {}
 
-    if (
-        not ignore_root_aggregate
-        and isinstance(node, (Lift, Ensemble))
-        and node.aggregate_with
-    ):
-        yield _make_label(node.name, label_context)
-        return
-
     match node:
+        case Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn) if fn is not None:
+            yield _make_label(node.name, label_context)
         case Leaf(label=label):
             yield _make_label(label, label_context)
         case Lift(child=child, name=name, values=values):
@@ -269,10 +261,20 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
+def _get_aggregate_input_columns(
+    node: PomapNode, label_context: dict
+) -> Iterator[str]:
+    match node:
+        case Lift(child=child, name=name, values=values):
+            for value in values:
+                yield from _collect_labels(child, label_context | {name: value})
+        case Ensemble():
+            for child in node.children:
+                yield from _collect_labels(child, label_context)
+
+
 def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame:
-    input_cols = list(
-        _collect_labels(node, label_context, ignore_root_aggregate=True)
-    )
+    input_cols = list(_get_aggregate_input_columns(node, label_context))
     full_col = _make_label(node.name, label_context)
     df = df.with_columns(node.aggregate_with(*input_cols).alias(full_col))
     return df.drop(*input_cols)
