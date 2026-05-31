@@ -272,6 +272,38 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
+def _produced_columns(
+    node: PomapNode,
+    label_context: dict,
+    ignore_root_aggregate: bool = False,
+) -> Iterator[str]:
+    """Yield the column names this subtree contributes to the predict-output df.
+
+    Descendants with `aggregate_with` short-circuit: instead of yielding their
+    leaf labels we yield the single aggregate column they produce. Set
+    `ignore_root_aggregate=True` to skip that check for `node` itself — useful
+    when asking "what columns will my aggregate consume?" rather than "what
+    columns will my subtree leave behind?".
+    """
+    if (
+        not ignore_root_aggregate
+        and isinstance(node, (Lift, Ensemble))
+        and node.aggregate_with
+    ):
+        yield _make_label(node.name, label_context)
+        return
+
+    match node:
+        case Leaf(label=label):
+            yield _make_label(label, label_context)
+        case Lift(child=child, name=name, values=values):
+            for value in values:
+                yield from _produced_columns(child, label_context | {name: value})
+        case PomapNode():
+            for child in node.children:
+                yield from _produced_columns(child, label_context)
+
+
 def _apply_aggregates(
     node: PomapNode,
     df: DataFrame,
@@ -287,10 +319,14 @@ def _apply_aggregates(
             for child in node.children:
                 df = _apply_aggregates(child, df, label_context)
 
-    if isinstance(node, (Lift, Ensemble)) and node.aggregate_with:
-        child_labels = list(_collect_labels(node, label_context))
-        full_col = _make_label(node.name, label_context)
-        df = df.with_columns(node.aggregate_with(*child_labels).alias(full_col))
+    match node:
+        case (Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn)) if fn is not None:
+            input_cols = list(
+                _produced_columns(node, label_context, ignore_root_aggregate=True)
+            )
+            full_col = _make_label(node.name, label_context)
+            df = df.with_columns(fn(*input_cols).alias(full_col))
+            df = df.drop(*input_cols)
 
     return df
 

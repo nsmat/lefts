@@ -114,6 +114,45 @@ def test_predict_ensemble_x(ensemble_x1_x2, test_dataframe):
     assert (predictions["model-x2"] == -8.0).all()
 
 
+def test_predict_ensemble_with_aggregate(model_x, model_x2, test_dataframe):
+    ensemble = Ensemble(
+        name="avg",
+        models=[model_x, model_x2],
+        aggregate_with=pl.mean_horizontal,
+    )
+    models, _ = _fit(ensemble, test_dataframe)
+    predictions = _predict(ensemble, models, test_dataframe)
+
+    assert (predictions["avg"] == 0.0).all()
+    assert "model-x" not in predictions.columns
+    assert "model-x2" not in predictions.columns
+
+
+def test_predict_nested_aggregates(test_dataframe):
+    """Tests that we can operate on the inner columns of an aggregate"""
+    inner_x = Leaf(label="inner-x", factory=lambda: MockModel(x_column="x"))
+    inner_x2 = Leaf(label="inner-x2", factory=lambda: MockModel(x_column="x2"))
+    outer_x = Leaf(label="outer-x", factory=lambda: MockModel(x_column="x"))
+
+    inner = Ensemble(
+        name="inner",
+        models=[inner_x, inner_x2],
+        aggregate_with=pl.mean_horizontal,
+    )
+    outer = Ensemble(
+        name="outer",
+        models=[inner, outer_x],
+        aggregate_with=pl.mean_horizontal,
+    )
+
+    models, _ = _fit(outer, test_dataframe)
+    predictions = _predict(outer, models, test_dataframe)
+
+    assert (predictions["outer"] == 4.0).all()
+    for intermediate in ("inner", "inner-x", "inner-x2", "outer-x"):
+        assert intermediate not in predictions.columns
+
+
 def test_fit_double_lift(model_x, test_dataframe):
     """
     Tests that model labels are well formed after
