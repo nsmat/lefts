@@ -33,11 +33,6 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
     return "\n".join(lines)
 
 
-def _validate_tree(node: PomapNode, observed_names=None):
-    # TODO add namespace checking. Need to check both types and namespaces
-    ...
-
-
 def _collect_labels(
     node: PomapNode,
     label_context: dict | None = None,
@@ -274,6 +269,15 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
+def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame:
+    input_cols = list(
+        _collect_labels(node, label_context, ignore_root_aggregate=True)
+    )
+    full_col = _make_label(node.name, label_context)
+    df = df.with_columns(node.aggregate_with(*input_cols).alias(full_col))
+    return df.drop(*input_cols)
+
+
 def _apply_aggregates(
     node: PomapNode,
     df: DataFrame,
@@ -282,21 +286,19 @@ def _apply_aggregates(
     label_context = label_context or {}
 
     match node:
-        case Lift(name=name, values=values, child=child):
+        case Lift(name=name, values=values, child=child, aggregate_with=fn):
             for value in values:
                 df = _apply_aggregates(child, df, label_context | {name: value})
+            if fn is not None:
+                df = _aggregate(node, df, label_context)
+        case Ensemble(aggregate_with=fn):
+            for child in node.children:
+                df = _apply_aggregates(child, df, label_context)
+            if fn is not None:
+                df = _aggregate(node, df, label_context)
         case PomapNode():
             for child in node.children:
                 df = _apply_aggregates(child, df, label_context)
-
-    match node:
-        case Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn) if fn is not None:
-            input_cols = list(
-                _collect_labels(node, label_context, ignore_root_aggregate=True)
-            )
-            full_col = _make_label(node.name, label_context)
-            df = df.with_columns(fn(*input_cols).alias(full_col))
-            df = df.drop(*input_cols)
 
     return df
 
