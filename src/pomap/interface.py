@@ -3,7 +3,7 @@ from typing import Any, Callable, Iterable
 
 from polars import DataFrame
 
-from .interpreter import _collect_labels, _fit, _Model, _print_tree
+from .interpreter import _fit, _Model, _print_tree, _collect_labels
 from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift
 
 

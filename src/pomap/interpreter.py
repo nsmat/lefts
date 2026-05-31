@@ -38,30 +38,6 @@ def _validate_tree(node: PomapNode, observed_names=None):
     ...
 
 
-def _collect_labels(node: PomapNode, label_context=None) -> Iterator[str]:
-    label_context = label_context or {}
-
-    match node:
-        case Leaf(label=l):
-            yield _make_label(l, label_context)
-
-        case Lift(child=child, values=values, name=name):
-            # Under a lift, we will take the cartesian product
-            # Of the existing labels with the lift values
-            for value in values:
-                extended_label_context = label_context | {name: value}
-                yield from _collect_labels(child, extended_label_context)
-
-        case Ensemble() | LearnsFrom() | Feed():
-            for child in node.children:
-                yield from _collect_labels(child, label_context)
-
-        case _:
-            raise NotImplementedError(
-                f"Not implemented for node type {node.__class__.__name__}"
-            )
-
-
 @dataclass
 class _Model:
     root: PomapNode
@@ -272,9 +248,9 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
-def _produced_columns(
+def _collect_labels(
     node: PomapNode,
-    label_context: dict,
+    label_context: dict | None = None,
     ignore_root_aggregate: bool = False,
 ) -> Iterator[str]:
     """Yield the column names this subtree contributes to the predict-output df.
@@ -285,6 +261,8 @@ def _produced_columns(
     when asking "what columns will my aggregate consume?" rather than "what
     columns will my subtree leave behind?".
     """
+    label_context = label_context or {}
+
     if (
         not ignore_root_aggregate
         and isinstance(node, (Lift, Ensemble))
@@ -298,10 +276,10 @@ def _produced_columns(
             yield _make_label(label, label_context)
         case Lift(child=child, name=name, values=values):
             for value in values:
-                yield from _produced_columns(child, label_context | {name: value})
+                yield from _collect_labels(child, label_context | {name: value})
         case PomapNode():
             for child in node.children:
-                yield from _produced_columns(child, label_context)
+                yield from _collect_labels(child, label_context)
 
 
 def _apply_aggregates(
@@ -320,9 +298,9 @@ def _apply_aggregates(
                 df = _apply_aggregates(child, df, label_context)
 
     match node:
-        case (Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn)) if fn is not None:
+        case Lift(aggregate_with=fn) | Ensemble(aggregate_with=fn) if fn is not None:
             input_cols = list(
-                _produced_columns(node, label_context, ignore_root_aggregate=True)
+                _collect_labels(node, label_context, ignore_root_aggregate=True)
             )
             full_col = _make_label(node.name, label_context)
             df = df.with_columns(fn(*input_cols).alias(full_col))

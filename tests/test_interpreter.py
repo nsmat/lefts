@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from pomap.nodes import Lift, Leaf, Ensemble, LearnsFrom, Feed
-from pomap.interpreter import _collect_labels, _fit, _predict
+from pomap.interpreter import _fit, _predict, _collect_labels
 
 
 @pytest.fixture
@@ -173,8 +173,7 @@ def test_fit_double_lift(model_x, test_dataframe):
         test_filter=lambda v: pl.col("category") == pl.lit(v),
     )
     models, _ = _fit(outer, test_dataframe)
-    assert set(models.keys()) == set(_collect_labels(outer))
-    assert "model-x[category=a, sign=pos]" in models
+    assert set(models.keys()) == {"model-x[category=a, sign=pos]"}
 
 
 @dataclass
