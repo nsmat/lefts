@@ -153,6 +153,25 @@ def test_predict_nested_aggregates(test_dataframe):
         assert intermediate not in predictions.columns
 
 
+def test_collect_labels_stacked_aggregates(model_x, model_x2):
+    inner = Ensemble(
+        name="inner",
+        models=[model_x, model_x2],
+        aggregate_with=pl.mean_horizontal,
+    )
+    outer = Lift(
+        name="fold",
+        child=inner,
+        values=[1, 2, 3],
+        train_filter=lambda v: pl.lit(True),
+        test_filter=lambda v: pl.lit(True),
+        aggregate_with=pl.mean_horizontal,
+    )
+
+    assert set(_collect_labels(outer)) == {"fold"}
+    assert set(_collect_labels(inner)) == {"inner"}
+
+
 def test_fit_double_lift(model_x, test_dataframe):
     """
     Tests that model labels are well formed after
