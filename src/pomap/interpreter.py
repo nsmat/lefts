@@ -253,14 +253,6 @@ def _collect_labels(
     label_context: dict | None = None,
     ignore_root_aggregate: bool = False,
 ) -> Iterator[str]:
-    """Yield the column names this subtree contributes to the predict-output df.
-
-    Descendants with `aggregate_with` short-circuit: instead of yielding their
-    leaf labels we yield the single aggregate column they produce. Set
-    `ignore_root_aggregate=True` to skip that check for `node` itself — useful
-    when asking "what columns will my aggregate consume?" rather than "what
-    columns will my subtree leave behind?".
-    """
     label_context = label_context or {}
 
     if (
