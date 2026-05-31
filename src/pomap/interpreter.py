@@ -263,7 +263,7 @@ def _fit(
     return fitted_models, output_hyperparameters
 
 
-def _get_aggregate_input_columns(
+def _get_aggregation_input_columns(
     node: PomapNode, label_context: dict
 ) -> Iterator[str]:
     match node:
@@ -276,13 +276,13 @@ def _get_aggregate_input_columns(
 
 
 def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame:
-    input_cols = list(_get_aggregate_input_columns(node, label_context))
+    input_cols = list(_get_aggregation_input_columns(node, label_context))
     full_col = _make_label(node.name, label_context)
     df = df.with_columns(node.aggregate_with(*input_cols).alias(full_col))
     return df.drop(*input_cols)
 
 
-def _apply_aggregates(
+def _apply_aggregations(
     node: PomapNode,
     df: DataFrame,
     label_context: dict | None = None,
@@ -292,17 +292,17 @@ def _apply_aggregates(
     match node:
         case Lift(name=name, values=values, child=child, aggregate_with=fn):
             for value in values:
-                df = _apply_aggregates(child, df, label_context | {name: value})
+                df = _apply_aggregations(child, df, label_context | {name: value})
             if fn is not None:
                 df = _aggregate(node, df, label_context)
         case Ensemble(aggregate_with=fn):
             for child in node.children:
-                df = _apply_aggregates(child, df, label_context)
+                df = _apply_aggregations(child, df, label_context)
             if fn is not None:
                 df = _aggregate(node, df, label_context)
         case PomapNode():
             for child in node.children:
-                df = _apply_aggregates(child, df, label_context)
+                df = _apply_aggregations(child, df, label_context)
 
     return df
 
@@ -315,10 +315,9 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
 
     df = df.with_row_index(name="__pomap_row_index")
 
-    # Reuse precomputed masks so each leaf gets the correct test slice
-    # without re-traversing the tree per label.
     precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in _collect_masks(node)}
 
+    # We compute the full space of output columns first, then apply aggregation post-hoc
     for label, (_train_mask, _validation_mask, test_mask) in precomputed_masks.items():
         test_df = df.filter(test_mask)
         predictions = models[label].predict(test_df)
@@ -333,7 +332,7 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
             how="left",
         )
 
-    df = _apply_aggregates(node, df)
+    df = _apply_aggregations(node, df)
     df = df.drop("__pomap_row_index")
 
     return df
