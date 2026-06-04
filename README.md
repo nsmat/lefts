@@ -3,7 +3,7 @@
 Pomap is a very simple domain specific language for building complex machine learning workflows from simple ones. Starting with your favourite machine learning models, you can use Pomap commands to:
 - Build complex ensembles.
 - Build complex cross validation and hyper-parametrisation procedures.
-- Create dependencies between models.
+- Allow a model to create features or targets fpr aorother model.
 - Any combination of the above.
 
 Without making subsequent model evaluation, storage, or experimentation any more complex than it was with the original model. This implementation is built on top of the excellent Polars DataFrame library.
@@ -14,27 +14,7 @@ Pomap has four commands:
 - Lift: trains multiple copies of a model across different subsets of data.
 - Ensemble: Takes a set of models and makes them evaluate as one.
 - LearnsFrom: Allows a model to learn its hyperparameters from another.
-- Feeds: Allows the output of one model to be used as a feature by another.
-
-## Examples
-TODO: move these to an API specification? Or just link to a tutorial?
-### Lift
-
-### Ensemble
-
-### LearnsFrom
-
-### Feeds
-
-# Model management
-### Accessing models
-TODO: describe labels here. I want to revisit this first since they are still a bit clunky
-
-### Manipulating models
-TODO: not implemented - idea is you should be able to easily delete nodes etc.
-
-### Saving models
-TODO: Not implemented
+- Feeds: Allows the output of one model to be used as a feature or target by another.
 
 # Models
 
