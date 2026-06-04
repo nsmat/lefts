@@ -21,7 +21,8 @@ dev  = [
     "ipykernel",
     "jupyter",
     "jupyterlab",
-    "nbstripout"
+    "nbstripout",
+    "ucimlrepo>=0.0.7",
 ]
 
 [build-system]
