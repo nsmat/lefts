@@ -80,7 +80,9 @@ def test_split_above_feed_warns_nan_augmentation(test_dataframe):
         test_filter=pl.col("x") >= 10,
     )
 
-    with pytest.warns(UserWarning, match="rows in consumer's train set are not in source's test set"):
+    with pytest.warns(
+        UserWarning, match="rows in consumer's train set are not in source's test set"
+    ):
         model.fit(test_dataframe)
 
 
@@ -100,5 +102,8 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
     )
     model = feed("d", source=src, consumer=cons)
 
-    with pytest.warns(UserWarning, match="source's train set contains .* rows not in consumer's train set"):
+    with pytest.warns(
+        UserWarning,
+        match="source's train set contains .* rows not in consumer's train set",
+    ):
         model.fit(test_dataframe)
