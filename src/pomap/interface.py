@@ -3,7 +3,7 @@ from typing import Any, Callable, Iterable
 
 from polars import DataFrame
 
-from .interpreter import _fit, _Model, _print_tree, _collect_labels
+from .interpreter import _fit, _Model, _print_tree, _collect_labels, _collect_masks
 from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift, Split
 from .validation import _validate
 
@@ -26,6 +26,20 @@ class Model(_Model):
 
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
+
+    def mark_train_validation_test_rows(self, df: DataFrame) -> DataFrame:
+        """
+        Annotate `df` with boolean columns describing whether each
+        row belongs to the train, test and (if applicable) validation
+        sets for each sub model.
+        """
+        new_cols = []
+        for label, train_mask, validation_mask, test_mask in _collect_masks(self.root):
+            new_cols.append(train_mask.alias(f"{label}__train"))
+            new_cols.append(test_mask.alias(f"{label}__test"))
+            if validation_mask is not None:
+                new_cols.append(validation_mask.alias(f"{label}__validation"))
+        return df.with_columns(new_cols)
 
 
 def leaf(model_constructor: Callable[..., Any], label: str) -> Model:
