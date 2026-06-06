@@ -4,11 +4,15 @@ from typing import Any, Callable, Iterable
 from polars import DataFrame
 
 from .interpreter import _fit, _Model, _print_tree, _collect_labels
-from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift
+from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift, Split
+from .validation import _validate
 
 
 @dataclass
 class Model(_Model):
+    def __post_init__(self):
+        _validate(self.root)
+
     def fit(self, df: DataFrame):
         models, hyperparameters = _fit(self.root, df)
         self.models = models
@@ -49,6 +53,24 @@ def lift(
     )
 
     return Model(lifted)
+
+
+def split(
+    name: str,
+    model: Model,
+    train_filter,
+    test_filter,
+    validation_filter=None,
+) -> Model:
+    node = Split(
+        name=name,
+        child=model.root,
+        train_filter=train_filter,
+        test_filter=test_filter,
+        validation_filter=validation_filter,
+    )
+
+    return Model(node)
 
 
 def ensemble(name: str, *models, aggregate_with=None):

@@ -67,6 +67,23 @@ class Lift(PomapNode):
 
 
 @dataclass
+class Split(PomapNode):
+    name: str
+    child: PomapNode
+    train_filter: Expr
+    test_filter: Expr
+    validation_filter: Expr | None = None
+
+    @property
+    def children(self) -> Iterable["PomapNode"]:
+        return [self.child]
+
+    @property
+    def tree_repr(self) -> str:
+        return f"Split: {self.name}"
+
+
+@dataclass
 class Ensemble(PomapNode):
     name: str
     models: Iterable[PomapNode]

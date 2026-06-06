@@ -1,4 +1,4 @@
-from .nodes import PomapNode, Leaf, Lift, Ensemble, LearnsFrom, Feed
+from .nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
 from typing import Iterator, Tuple, Any, Optional
 from polars import DataFrame, Series, Expr, lit
 from dataclasses import dataclass
@@ -115,6 +115,30 @@ def _collect_masks(
                     next_test_mask,
                 )
 
+        case Split(
+            child=child,
+            train_filter=train_filter,
+            validation_filter=validation_filter,
+            test_filter=test_filter,
+        ):
+            next_train_mask = train_filter & train_mask
+            next_test_mask = test_filter & test_mask
+
+            if validation_filter is None:
+                next_validation_mask = validation_mask
+            else:
+                next_validation_mask = validation_filter
+                if validation_mask is not None:
+                    next_validation_mask = next_validation_mask & validation_mask
+
+            yield from _collect_masks(
+                child,
+                label_context,
+                next_train_mask,
+                next_validation_mask,
+                next_test_mask,
+            )
+
         case PomapNode():
             for child in node.children:
                 yield from _collect_masks(
@@ -207,6 +231,18 @@ def _fit(
 
                 fitted_models |= child_models
                 output_hyperparameters |= child_hyperparameters
+
+        case Split(child=child):
+            child_models, child_hyperparameters = _fit(
+                child,
+                df,
+                hyperparameters,
+                label_context,
+                False,
+                precomputed_masks,
+            )
+            fitted_models |= child_models
+            output_hyperparameters |= child_hyperparameters
 
         case Ensemble():
             for child in node.children:

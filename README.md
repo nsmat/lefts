@@ -10,11 +10,12 @@ Without making subsequent model evaluation, storage, or experimentation any more
 
 
 # Commands
-Pomap has four commands:
+Pomap has five commands:
 - Lift: trains multiple copies of a model across different subsets of data.
 - Ensemble: Takes a set of models and makes them evaluate as one.
 - LearnsFrom: Allows a model to learn its hyperparameters from another.
 - Feeds: Allows the output of one model to be used as a feature or target by another.
+- Split: Trains a model on a given train/test/validation split.
 
 # Models
 
