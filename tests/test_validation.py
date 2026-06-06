@@ -2,7 +2,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, Feed, LearnsFrom
+from pomap.nodes import Lift, Leaf, Split, Ensemble, Feed
 from pomap.validation import _validate
 from pomap.interface import leaf, lift, feed, ensemble
 
@@ -59,23 +59,29 @@ def test_valid_tree_passes():
 
 def test_duplicate_sibling_leaves_raises():
     ens = Ensemble(name="e", models=[_leaf("dup"), _leaf("dup")])
-    with pytest.raises(ValueError, match="Duplicate decorated leaf labels"):
+    with pytest.raises(ValueError, match="Duplicate node names"):
         _validate(ens)
 
 
-def test_duplicate_lift_names_in_ancestor_chain_raises():
+def test_duplicate_lift_names_raises():
     inner = _trivial_lift(_leaf("m"), name="fold")
     outer = _trivial_lift(inner, name="fold")
-    with pytest.raises(ValueError, match="reused along an ancestor chain"):
+    with pytest.raises(ValueError, match="Duplicate node names"):
         _validate(outer)
 
 
-def test_sibling_lifts_can_share_name():
-    """Two Lifts at the same depth (not in an ancestor chain) may reuse a name."""
+def test_sibling_lifts_with_same_name_raises():
     a = _trivial_lift(_leaf("a"), name="fold")
     b = _trivial_lift(_leaf("b"), name="fold")
     ens = Ensemble(name="e", models=[a, b])
-    _validate(ens)  # no raise
+    with pytest.raises(ValueError, match="Duplicate node names"):
+        _validate(ens)
+
+
+def test_lift_name_colliding_with_leaf_label_raises():
+    node = _trivial_lift(_leaf("x"), name="x")
+    with pytest.raises(ValueError, match="Duplicate node names"):
+        _validate(node)
 
 
 def test_lift_above_feed_raises():
@@ -148,17 +154,6 @@ def test_reserved_leaf_label_raises():
         _validate(bad)
 
 
-def test_non_callable_learn_logic_raises():
-    bad = LearnsFrom(
-        name="lf",
-        learner=_leaf("l"),
-        learns_from=_leaf("s"),
-        learn_logic="not a function",
-    )
-    with pytest.raises(ValueError, match="non-callable learn_logic"):
-        _validate(bad)
-
-
 def test_interface_helpers_invoke_validation():
     """Sanity check: validation fires at Model construction via interface helpers."""
     src = leaf(lambda: MockModel(), "src")
@@ -178,5 +173,5 @@ def test_interface_helpers_invoke_validation():
 def test_interface_helper_catches_duplicate_labels():
     a = leaf(lambda: MockModel(), "dup")
     b = leaf(lambda: MockModel(), "dup")
-    with pytest.raises(ValueError, match="Duplicate decorated leaf labels"):
+    with pytest.raises(ValueError, match="Duplicate node names"):
         ensemble("e", a, b)
