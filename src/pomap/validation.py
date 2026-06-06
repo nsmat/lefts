@@ -34,21 +34,11 @@ def _collect_node_names(node: PomapNode) -> Iterator[str]:
 
 
 def _check_no_lift_above_feed(node: PomapNode, under_lift: bool) -> None:
-    """Reject Lift as an ancestor of Feed.
-
-    The source leaf's prediction column would be named with the Lift's decoration
-    (e.g. `teacher[fold=v]`) while the consumer's leaf code references the bare
-    label literal — a column-name mismatch. Until output-channel stability lands,
-    this case is blocked. Split-above-Feed is permitted: it raises NaN-augmentation
-    warnings at fit time but is structurally sound.
-    """
+    """Reject Lift as an ancestor of Feed"""
     if isinstance(node, Feed) and under_lift:
         raise ValueError(
             f"Feed {node.name!r} has a Lift as an ancestor. This is currently "
-            "unsupported because the source's decorated leaf labels would not "
-            "match the bare-name references in the consumer. Workaround: express "
-            "the row split as a CV `lift` inside source with "
-            "`aggregate_with=pl.coalesce`, rather than wrapping the Feed."
+            "unsupported. Re-express by Lifting first and feeding second"
         )
     next_under_lift = under_lift or isinstance(node, Lift)
     for child in node.children:
