@@ -140,5 +140,3 @@ def test_split_validation_filter(test_dataframe):
     assert models["m"].train_mean == 3.25
     # val: x in [6, 8], mean = 7.0
     assert models["m"].val_mean == 7.0
-
-

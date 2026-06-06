@@ -4,7 +4,6 @@ import polars as pl
 
 from pomap.nodes import Lift, Leaf, Split, Ensemble, Feed
 from pomap.validation import _validate
-from pomap.interface import leaf, lift, feed, ensemble
 
 
 @dataclass
@@ -56,16 +55,19 @@ def test_valid_tree_passes():
     # Removing the outer Split makes it valid.
     _validate(ens)
 
+
 def test_duplicate_sibling_leaves_raises():
     ens = Ensemble(name="e", models=[_leaf("dup"), _leaf("dup")])
     with pytest.raises(ValueError, match="Duplicate node names"):
         _validate(ens)
+
 
 def test_parent_child_duplicates_raise():
     a = _leaf("a")
     ens = Ensemble(name="a", models=[a])
     with pytest.raises(ValueError, match="Duplicate node names"):
         _validate(ens)
+
 
 def test_grandparent_child_duplicates_raise():
     inner = Ensemble(name="e", models=[_leaf("a")])
@@ -90,7 +92,6 @@ def test_lift_above_feed_via_ensemble_raises():
         _validate(root)
 
 
-
 def test_split_above_feed_raises():
     inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
     node = Split(
@@ -101,6 +102,3 @@ def test_split_above_feed_raises():
     )
     with pytest.raises(ValueError, match="has a Split as an ancestor"):
         _validate(node)
-
-
-
