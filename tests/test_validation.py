@@ -32,14 +32,8 @@ def _trivial_lift(child, name="fold", values=("v",)) -> Lift:
 
 
 def test_valid_tree_passes():
-    # Split → Ensemble → (Feed with Split inside its consumer, lift over leaf)
-    consumer_split = Split(
-        name="inner_tt",
-        child=_leaf("cons"),
-        train_filter=pl.lit(True),
-        test_filter=pl.lit(True),
-    )
-    inner_feed = Feed(name="d", source=_leaf("src"), consumer=consumer_split)
+    # Outer Split → Ensemble → (Feed with Split inside its consumer, lift over leaf)
+    inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
     lifted = _trivial_lift(_leaf("other"), name="cat", values=["a", "b"])
     ens = Ensemble(name="e", models=[inner_feed, lifted])
     root = Split(
@@ -48,12 +42,7 @@ def test_valid_tree_passes():
         train_filter=pl.lit(True),
         test_filter=pl.lit(True),
     )
-    # Outer Split has the Feed as a descendant via the Ensemble — should raise.
-    with pytest.raises(ValueError, match="has a Split as an ancestor"):
-        _validate(root)
-
-    # Removing the outer Split makes it valid.
-    _validate(ens)
+    _validate(root)  # no raise
 
 
 def test_duplicate_sibling_leaves_raises():
@@ -92,7 +81,9 @@ def test_lift_above_feed_via_ensemble_raises():
         _validate(root)
 
 
-def test_split_above_feed_raises():
+def test_split_above_feed_passes():
+    """Split-above-Feed is permitted after the locality fix; potential NaN-augmentation
+    is communicated via a fit-time warning, not a validation error."""
     inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
     node = Split(
         name="tt",
@@ -100,5 +91,4 @@ def test_split_above_feed_raises():
         train_filter=pl.lit(True),
         test_filter=pl.lit(True),
     )
-    with pytest.raises(ValueError, match="has a Split as an ancestor"):
-        _validate(node)
+    _validate(node)  # no raise

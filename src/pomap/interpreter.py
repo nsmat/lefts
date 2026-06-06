@@ -1,3 +1,5 @@
+import warnings
+
 from .nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
 from typing import Iterator, Tuple, Any, Optional
 from polars import DataFrame, Series, Expr, lit
@@ -278,10 +280,20 @@ def _fit(
             output_hyperparameters |= learner_hyperparameters | learned_hyperparameters
 
         case Feed(source=source, consumer=consumer):
-            source_models, source_hyperparameters = _fit(source, df)
-            source_model = _Model(source, source_models, source_hyperparameters)
-            augmented_df = source_model.predict(df)
-
+            _check_feed_row_compatibility(
+                source, consumer, df, precomputed_masks, label_context
+            )
+            source_models, source_hyperparameters = _fit(
+                source,
+                df,
+                hyperparameters,
+                label_context,
+                False,
+                precomputed_masks,
+            )
+            augmented_df = _augment_for_feed(
+                source, source_models, df, precomputed_masks, label_context
+            )
             consumer_models, consumer_hyperparameters = _fit(
                 consumer,
                 augmented_df,
@@ -341,6 +353,79 @@ def _apply_aggregations(
                 df = _apply_aggregations(child, df, label_context)
 
     return df
+
+
+def _augment_for_feed(
+    source_root: PomapNode,
+    source_models: dict,
+    df: DataFrame,
+    outer_precomputed_masks: dict,
+    outer_label_context: dict,
+) -> DataFrame:
+    if "__pomap_row_index" in df.columns:
+        raise ValueError(
+            "Trying to create column __pomap_row_index but it already exists"
+        )
+    df = df.with_row_index(name="__pomap_row_index")
+
+    for source_label, _train, _val, _test in _collect_masks(
+        source_root, outer_label_context
+    ):
+        test_mask = outer_precomputed_masks[source_label][2]
+        test_df = df.filter(test_mask)
+        predictions = source_models[source_label].predict(test_df)
+        predictions = Series(name=source_label, values=predictions)
+        test_df = test_df.with_columns(predictions)
+        df = df.join(
+            test_df.select("__pomap_row_index", source_label),
+            on="__pomap_row_index",
+            coalesce=True,
+            how="left",
+        )
+
+    df = _apply_aggregations(source_root, df, outer_label_context)
+    return df.drop("__pomap_row_index")
+
+
+def _check_feed_row_compatibility(
+    source_root: PomapNode,
+    consumer_root: PomapNode,
+    df: DataFrame,
+    precomputed_masks: dict,
+    label_context: dict,
+) -> None:
+    def union_mask(node: PomapNode, mask_index: int) -> Expr:
+        result = lit(False)
+        for label, _, _, _ in _collect_masks(node, label_context):
+            result = result | precomputed_masks[label][mask_index]
+        return result
+
+    source_train = union_mask(source_root, 0)
+    source_test = union_mask(source_root, 2)
+    consumer_train = union_mask(consumer_root, 0)
+
+    leak_rows = df.filter(source_train & ~consumer_train).height
+    if leak_rows > 0:
+        warnings.warn(
+            f"Feed: source's train set contains {leak_rows} rows not in consumer's "
+            "train set. This may signal a data leak (if those rows are part of "
+            "consumer's test set) or be intentional (if source legitimately trains "
+            "on extra data outside consumer's scope).",
+            UserWarning,
+            stacklevel=4,
+        )
+
+    nan_rows = df.filter(consumer_train & ~source_test).height
+    if nan_rows > 0:
+        warnings.warn(
+            f"Feed: {nan_rows} rows in consumer's train set are not in source's "
+            "test set. Source's augmentation column will be NaN on those rows "
+            "during consumer fit. If your consumer does not handle NaN features, "
+            "consider expressing source as a CV `lift` with `aggregate_with=pl.coalesce` "
+            "so source's test_mask covers consumer's train rows.",
+            UserWarning,
+            stacklevel=4,
+        )
 
 
 def _predict(node: PomapNode, models: dict, df: DataFrame):
