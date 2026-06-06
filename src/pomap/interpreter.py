@@ -75,12 +75,8 @@ def _collect_masks(
     validation_mask: Expr | None = None,
     test_mask: Expr | None = None,
 ) -> dict[str, dict[str, Expr | None]]:
-    """Walk `node` and return `{decorated_label: {"train": ..., "validation": ..., "test": ...}}`.
-
-    Each leaf's masks are the conjunction of every ancestor row-filter encountered
-    on the path from `node` down to that leaf. The `*_mask` parameters carry an
-    incoming conjoined mask from a caller higher in the tree; at the top-level
-    call they default to `lit(True)` (train, test) and `None` (validation).
+    """
+    Returns a dictionary of label -> {train: train_mask, validation: validation_mask, test: test_mask}
     """
     label_context = label_context or dict()
     train_mask = train_mask if train_mask is not None else lit(True)
@@ -385,6 +381,18 @@ def _check_feed_row_compatibility(
     precomputed_masks: dict,
     label_context: dict,
 ) -> None:
+    """
+    Emits warnings if there is suspicious behaviour in the train/test
+    overlap of the source and consumer of a Feed node.
+
+    Specifically it will warn if:
+    - The test set of the source is not a subset of the consumer. This may indicate a data leak.
+    - The test set of the source is a strict subset of the consumer, since this will cause NaNs in the fed column.
+    """
+
+    # It's possible to have multiple leaves with separate train/test
+    # Specification as one source (i.e. an ensemble with an aggregate)
+    # Hence, we take the union of all child masks.
     def union_mask(node: PomapNode, mask_kind: str) -> Expr:
         result = lit(False)
         for label in _collect_masks(node, label_context):
