@@ -50,7 +50,6 @@ def test_plain_feed_no_warnings(test_dataframe):
 
 
 def test_split_above_feed_no_leakage(test_dataframe):
-    """The motivating fix: source must train only on the Split's train rows."""
     src = leaf(lambda: MockModel(x_column="x"), "src")
     cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
     inner = feed("d", source=src, consumer=cons)

@@ -82,8 +82,6 @@ def test_lift_above_feed_via_ensemble_raises():
 
 
 def test_split_above_feed_passes():
-    """Split-above-Feed is permitted after the locality fix; potential NaN-augmentation
-    is communicated via a fit-time warning, not a validation error."""
     inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
     node = Split(
         name="tt",
