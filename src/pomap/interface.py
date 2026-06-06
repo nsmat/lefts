@@ -34,11 +34,11 @@ class Model(_Model):
         sets for each sub model.
         """
         new_cols = []
-        for label, train_mask, validation_mask, test_mask in _collect_masks(self.root):
-            new_cols.append(train_mask.alias(f"{label}__train"))
-            new_cols.append(test_mask.alias(f"{label}__test"))
-            if validation_mask is not None:
-                new_cols.append(validation_mask.alias(f"{label}__validation"))
+        for label, masks in _collect_masks(self.root).items():
+            new_cols.append(masks["train"].alias(f"{label}__train"))
+            new_cols.append(masks["test"].alias(f"{label}__test"))
+            if masks["validation"] is not None:
+                new_cols.append(masks["validation"].alias(f"{label}__validation"))
         return df.with_columns(new_cols)
 
 

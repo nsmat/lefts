@@ -74,16 +74,28 @@ def _collect_masks(
     train_mask: Expr | None = None,
     validation_mask: Expr | None = None,
     test_mask: Expr | None = None,
-):
-    label_context = label_context or dict()
+) -> dict[str, dict[str, Expr | None]]:
+    """Walk `node` and return `{decorated_label: {"train": ..., "validation": ..., "test": ...}}`.
 
+    Each leaf's masks are the conjunction of every ancestor row-filter encountered
+    on the path from `node` down to that leaf. The `*_mask` parameters carry an
+    incoming conjoined mask from a caller higher in the tree; at the top-level
+    call they default to `lit(True)` (train, test) and `None` (validation).
+    """
+    label_context = label_context or dict()
     train_mask = train_mask if train_mask is not None else lit(True)
     test_mask = test_mask if test_mask is not None else lit(True)
+
+    result = {}
 
     match node:
         case Leaf(label=leaf_label):
             full_label = _make_label(leaf_label, label_context)
-            yield full_label, train_mask, validation_mask, test_mask
+            result[full_label] = {
+                "train": train_mask,
+                "validation": validation_mask,
+                "test": test_mask,
+            }
 
         case Lift(
             child=child,
@@ -95,12 +107,8 @@ def _collect_masks(
         ):
             for value in values:
                 next_label_context = {**label_context, name: value}
-
-                lift_train_mask = train_filter(value)
-                next_train_mask = lift_train_mask & train_mask
-
-                lift_test_mask = test_filter(value)
-                next_test_mask = lift_test_mask & test_mask
+                next_train_mask = train_filter(value) & train_mask
+                next_test_mask = test_filter(value) & test_mask
 
                 if validation_filter is None:
                     next_validation_mask = validation_mask
@@ -109,12 +117,14 @@ def _collect_masks(
                     if validation_mask is not None:
                         next_validation_mask = next_validation_mask & validation_mask
 
-                yield from _collect_masks(
-                    child,
-                    next_label_context,
-                    next_train_mask,
-                    next_validation_mask,
-                    next_test_mask,
+                result.update(
+                    _collect_masks(
+                        child,
+                        next_label_context,
+                        next_train_mask,
+                        next_validation_mask,
+                        next_test_mask,
+                    )
                 )
 
         case Split(
@@ -133,19 +143,25 @@ def _collect_masks(
                 if validation_mask is not None:
                     next_validation_mask = next_validation_mask & validation_mask
 
-            yield from _collect_masks(
-                child,
-                label_context,
-                next_train_mask,
-                next_validation_mask,
-                next_test_mask,
+            result.update(
+                _collect_masks(
+                    child,
+                    label_context,
+                    next_train_mask,
+                    next_validation_mask,
+                    next_test_mask,
+                )
             )
 
         case PomapNode():
             for child in node.children:
-                yield from _collect_masks(
-                    child, label_context, train_mask, validation_mask, test_mask
+                result.update(
+                    _collect_masks(
+                        child, label_context, train_mask, validation_mask, test_mask
+                    )
                 )
+
+    return result
 
 
 def _fit(
@@ -166,7 +182,6 @@ def _fit(
 
     if is_root:
         precomputed_masks = _collect_masks(node)
-        precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in precomputed_masks}
 
     match node:
         case Leaf(label=label, factory=factory):
@@ -177,8 +192,8 @@ def _fit(
             model = factory(**hyperparameters)
             model_label = _make_label(label, label_context)
 
-            train_mask = precomputed_masks[model_label][0]
-            validation_mask = precomputed_masks[model_label][1]
+            train_mask = precomputed_masks[model_label]["train"]
+            validation_mask = precomputed_masks[model_label]["validation"]
 
             train_df = df.filter(train_mask)
 
@@ -291,8 +306,16 @@ def _fit(
                 False,
                 precomputed_masks,
             )
-            augmented_df = _augment_for_feed(
-                source, source_models, df, precomputed_masks, label_context
+            source_precomputed_masks = {
+                label: precomputed_masks[label]
+                for label in _collect_masks(source, label_context)
+            }
+            augmented_df = _predict(
+                source,
+                source_models,
+                df,
+                source_precomputed_masks,
+                label_context,
             )
             consumer_models, consumer_hyperparameters = _fit(
                 consumer,
@@ -355,38 +378,6 @@ def _apply_aggregations(
     return df
 
 
-def _augment_for_feed(
-    source_root: PomapNode,
-    source_models: dict,
-    df: DataFrame,
-    outer_precomputed_masks: dict,
-    outer_label_context: dict,
-) -> DataFrame:
-    if "__pomap_row_index" in df.columns:
-        raise ValueError(
-            "Trying to create column __pomap_row_index but it already exists"
-        )
-    df = df.with_row_index(name="__pomap_row_index")
-
-    for source_label, _train, _val, _test in _collect_masks(
-        source_root, outer_label_context
-    ):
-        test_mask = outer_precomputed_masks[source_label][2]
-        test_df = df.filter(test_mask)
-        predictions = source_models[source_label].predict(test_df)
-        predictions = Series(name=source_label, values=predictions)
-        test_df = test_df.with_columns(predictions)
-        df = df.join(
-            test_df.select("__pomap_row_index", source_label),
-            on="__pomap_row_index",
-            coalesce=True,
-            how="left",
-        )
-
-    df = _apply_aggregations(source_root, df, outer_label_context)
-    return df.drop("__pomap_row_index")
-
-
 def _check_feed_row_compatibility(
     source_root: PomapNode,
     consumer_root: PomapNode,
@@ -394,15 +385,15 @@ def _check_feed_row_compatibility(
     precomputed_masks: dict,
     label_context: dict,
 ) -> None:
-    def union_mask(node: PomapNode, mask_index: int) -> Expr:
+    def union_mask(node: PomapNode, mask_kind: str) -> Expr:
         result = lit(False)
-        for label, _, _, _ in _collect_masks(node, label_context):
-            result = result | precomputed_masks[label][mask_index]
+        for label in _collect_masks(node, label_context):
+            result = result | precomputed_masks[label][mask_kind]
         return result
 
-    source_train = union_mask(source_root, 0)
-    source_test = union_mask(source_root, 2)
-    consumer_train = union_mask(consumer_root, 0)
+    source_train = union_mask(source_root, "train")
+    source_test = union_mask(source_root, "test")
+    consumer_train = union_mask(consumer_root, "train")
 
     leak_rows = df.filter(source_train & ~consumer_train).height
     if leak_rows > 0:
@@ -428,7 +419,24 @@ def _check_feed_row_compatibility(
         )
 
 
-def _predict(node: PomapNode, models: dict, df: DataFrame):
+def _predict(
+    node: PomapNode,
+    models: dict,
+    df: DataFrame,
+    precomputed_masks: dict | None = None,
+    label_context: dict | None = None,
+):
+    """Predict every leaf in `precomputed_masks` and apply aggregations.
+
+    `precomputed_masks` and `label_context` are passthroughs for callers that
+    already hold an outer context (e.g. `Feed`'s `_fit` augmentation, which
+    passes a scoped subset of the outer dict and the current label context so
+    decorated leaf labels and aggregated column names match the surrounding
+    tree). When omitted, both default to root-level values: masks are computed
+    from `node`'s subtree and the label context is empty.
+    """
+    label_context = label_context or {}
+
     if "__pomap_row_index" in df.columns:
         raise ValueError(
             "Trying to create column __pomap_row_index but it already exists"
@@ -436,11 +444,12 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
 
     df = df.with_row_index(name="__pomap_row_index")
 
-    precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in _collect_masks(node)}
+    if precomputed_masks is None:
+        precomputed_masks = _collect_masks(node)
 
     # We compute the full space of output columns first, then apply aggregation post-hoc
-    for label, (_train_mask, _validation_mask, test_mask) in precomputed_masks.items():
-        test_df = df.filter(test_mask)
+    for label, masks in precomputed_masks.items():
+        test_df = df.filter(masks["test"])
         predictions = models[label].predict(test_df)
         predictions = Series(name=label, values=predictions)
 
@@ -453,7 +462,7 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
             how="left",
         )
 
-    df = _apply_aggregations(node, df)
+    df = _apply_aggregations(node, df, label_context)
     df = df.drop("__pomap_row_index")
 
     return df
