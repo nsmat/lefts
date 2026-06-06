@@ -33,17 +33,28 @@ def _trivial_lift(child, name="fold", values=("v",)) -> Lift:
 
 
 def test_valid_tree_passes():
-    # Split → Ensemble → (Feed → leaves, lift over leaf)
-    inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
+    # Split → Ensemble → (Feed with Split inside its consumer, lift over leaf)
+    consumer_split = Split(
+        name="inner_tt",
+        child=_leaf("cons"),
+        train_filter=pl.lit(True),
+        test_filter=pl.lit(True),
+    )
+    inner_feed = Feed(name="d", source=_leaf("src"), consumer=consumer_split)
     lifted = _trivial_lift(_leaf("other"), name="cat", values=["a", "b"])
     ens = Ensemble(name="e", models=[inner_feed, lifted])
     root = Split(
-        name="tt",
+        name="outer_tt",
         child=ens,
         train_filter=pl.lit(True),
         test_filter=pl.lit(True),
     )
-    _validate(root)  # no raise
+    # Outer Split has the Feed as a descendant via the Ensemble — should raise.
+    with pytest.raises(ValueError, match="has a Split as an ancestor"):
+        _validate(root)
+
+    # Removing the outer Split makes it valid.
+    _validate(ens)
 
 
 def test_duplicate_sibling_leaves_raises():
@@ -90,14 +101,43 @@ def test_lift_inside_feed_source_passes():
     _validate(node)  # no raise
 
 
-def test_split_above_feed_passes():
-    """Split-above-Feed is allowed despite source leakage (documented caveat)."""
+def test_split_above_feed_raises():
     inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
     node = Split(
         name="tt",
         child=inner_feed,
         train_filter=pl.lit(True),
         test_filter=pl.lit(True),
+    )
+    with pytest.raises(ValueError, match="has a Split as an ancestor"):
+        _validate(node)
+
+
+def test_lift_above_split_above_feed_reports_lift():
+    """When both Lift and Split are ancestors, the error reports the worse one."""
+    inner_feed = Feed(name="d", source=_leaf("src"), consumer=_leaf("cons"))
+    inner_split = Split(
+        name="tt",
+        child=inner_feed,
+        train_filter=pl.lit(True),
+        test_filter=pl.lit(True),
+    )
+    root = _trivial_lift(inner_split, name="fold")
+    with pytest.raises(ValueError, match="has a Lift as an ancestor"):
+        _validate(root)
+
+
+def test_split_inside_feed_consumer_passes():
+    """Split downstream of Feed is fine — it's only upstream that leaks."""
+    node = Feed(
+        name="d",
+        source=_leaf("src"),
+        consumer=Split(
+            name="tt",
+            child=_leaf("cons"),
+            train_filter=pl.lit(True),
+            test_filter=pl.lit(True),
+        ),
     )
     _validate(node)  # no raise
 

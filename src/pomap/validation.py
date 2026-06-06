@@ -1,4 +1,4 @@
-from .nodes import PomapNode, Leaf, Lift, Feed, LearnsFrom
+from .nodes import PomapNode, Leaf, Lift, Split, Feed, LearnsFrom
 from .interpreter import _collect_labels
 
 
@@ -9,7 +9,7 @@ def _validate(root: PomapNode) -> None:
     """Validate a Pomap tree. Raises ValueError on failure, returns None on success."""
     _check_unique_decorated_labels(root)
     _check_unique_lift_names(root, set())
-    _check_no_lift_above_feed(root, under_lift=False)
+    _check_no_row_filter_above_feed(root, ancestor=None)
     _check_no_reserved_leaf_labels(root)
     _check_learn_logic_callable(root)
 
@@ -42,20 +42,27 @@ def _check_unique_lift_names(node: PomapNode, ancestor_lifts: set[str]) -> None:
         _check_unique_lift_names(child, next_ancestors)
 
 
-def _check_no_lift_above_feed(node: PomapNode, under_lift: bool) -> None:
-    if isinstance(node, Feed) and under_lift:
+def _check_no_row_filter_above_feed(node: PomapNode, ancestor: str | None) -> None:
+    """Reject Lift or Split as an ancestor of Feed.
+
+    `_fit`'s Feed case re-roots the source's fit, silently dropping any outer
+    row-filter masks — causing source leakage. Lift additionally causes a
+    label-decoration mismatch that crashes outer predict. The Feed-contract fix
+    tracked in CLAUDE.md will resolve both.
+    """
+    if isinstance(node, Feed) and ancestor is not None:
         raise ValueError(
-            f"Feed {node.name!r} has a Lift as an ancestor. This is currently "
-            "unsupported — the Feed re-roots its source's fit, dropping the "
-            "outer Lift's filters (causing CV leakage) and the source's stored "
-            "key won't match the lift-decorated key the outer predict will look "
-            "up. See CLAUDE.md 'Known design issues' for the planned Feed-contract "
-            "fix. Workaround: move row filters into the source/consumer subtrees, "
-            "or use Split when you don't need fan-out."
+            f"Feed {node.name!r} has a {ancestor} as an ancestor. This is currently unsupported"
         )
-    next_under_lift = under_lift or isinstance(node, Lift)
+    # Lift dominates Split in severity, so prefer it in the error message.
+    if isinstance(node, Lift):
+        next_ancestor = "Lift"
+    elif isinstance(node, Split):
+        next_ancestor = ancestor if ancestor == "Lift" else "Split"
+    else:
+        next_ancestor = ancestor
     for child in node.children:
-        _check_no_lift_above_feed(child, next_under_lift)
+        _check_no_row_filter_above_feed(child, next_ancestor)
 
 
 def _check_no_reserved_leaf_labels(node: PomapNode) -> None:

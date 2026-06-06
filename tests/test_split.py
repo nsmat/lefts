@@ -2,7 +2,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Feed
+from pomap.nodes import Lift, Leaf, Split
 from pomap.interpreter import _fit, _predict, _collect_labels
 
 
@@ -142,44 +142,3 @@ def test_split_validation_filter(test_dataframe):
     assert models["m"].val_mean == 7.0
 
 
-def test_split_wrapping_feed_consumer_sees_bare_source_column(test_dataframe):
-    """Consumer references the source's prediction column by literal name.
-
-    Documents that Split does NOT decorate labels, so the consumer's literal
-    column reference still works. Also documents the known leakage: the source
-    fits on all rows because Feed re-roots `_fit`, dropping Split's filter.
-    """
-    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
-
-    @dataclass
-    class SourcePlusXConsumer:
-        value: float = None
-
-        def fit(self, training_set):
-            self.value = (training_set["x"] + training_set["source"]).mean()
-
-        def predict(self, df):
-            return [self.value] * len(df)
-
-    consumer_leaf = Leaf(label="consumer", factory=lambda: SourcePlusXConsumer())
-    feed_node = Feed(name="d", source=source_leaf, consumer=consumer_leaf)
-    node = Split(
-        name="tt",
-        child=feed_node,
-        train_filter=pl.col("x") < 10,
-        test_filter=pl.lit(True),
-    )
-    models, _ = _fit(node, test_dataframe)
-
-    # Both stored under bare labels — Split doesn't decorate.
-    assert set(models.keys()) == {"source", "consumer"}
-
-    # Source LEAKS: trains on all 9 rows (Feed's fresh-root drops Split's filter).
-    # Mean x = 72 / 9 = 8.0
-    assert models["source"].value == 8.0
-
-    # Consumer respects Split's train mask: x < 10 → x in [2,3,4,4,6,8], n=6.
-    # "source" column on those rows = 8.0 (full-data source predicts everywhere).
-    # consumer.value = mean(x + source) over those rows = (2+3+4+4+6+8)/6 + 8.0
-    #                = 4.5 + 8.0 = 12.5
-    assert models["consumer"].value == 12.5
