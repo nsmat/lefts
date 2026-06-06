@@ -3,8 +3,8 @@
 Pomap is a very simple domain specific language for building complex machine learning workflows from simple ones. Starting with your favourite machine learning models, you can use Pomap commands to:
 - Build complex ensembles.
 - Build complex cross validation and hyper-parametrisation procedures.
-- Allow a model to create features or targets fpr aorother model.
-- Any combination of the above.
+- Allow a model to create features or targets for another model.
+- And any creative combination of the above.
 
 Without making subsequent model evaluation, storage, or experimentation any more complex than it was with the original model. This implementation is built on top of the excellent Polars DataFrame library.
 
