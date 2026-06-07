@@ -411,9 +411,8 @@ def _check_feed_row_compatibility(
     if leak_rows > 0:
         warnings.warn(
             f"Feed: source's train set contains {leak_rows} rows not in consumer's "
-            "train set. This may signal a data leak (if those rows are part of "
-            "consumer's test set) or be intentional (if source legitimately trains "
-            "on extra data outside consumer's scope).",
+            "train set. This may signal a data leak - validate with Model.mark_train_validation_test_rows"
+            "if you are unsure",
             UserWarning,
             stacklevel=4,
         )
@@ -423,9 +422,8 @@ def _check_feed_row_compatibility(
         warnings.warn(
             f"Feed: {nan_rows} rows in consumer's train set are not in source's "
             "test set. Source's augmentation column will be NaN on those rows "
-            "during consumer fit. If your consumer does not handle NaN features, "
-            "consider expressing source as a CV `lift` with `aggregate_with=pl.coalesce` "
-            "so source's test_mask covers consumer's train rows.",
+            "during consumer fit. If this is unexpected, validate your train and test filter"
+            "behaviour with Model.mark_train_validation_test_rows",
             UserWarning,
             stacklevel=4,
         )
