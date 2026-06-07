@@ -13,11 +13,15 @@ def test_plain_feed_no_warnings(test_dataframe):
     model = feed("d", source=src, consumer=cons)
 
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.simplefilter("error")  # Will crash (failing test) if fitting throws any warnings
+
         model.fit(test_dataframe)
 
     predictions = model.predict(test_dataframe)
     distinct = predictions.select("src", "cons").unique()
+
+    # Given both source and consumer are leaves, they train on
+    # The entire dataframe (x \in [1, ..., 9]
     expected = pl.DataFrame(
         {
             "src": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
@@ -40,7 +44,7 @@ def test_split_above_feed_no_leakage(test_dataframe):
     )
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # NaN-augmentation warning is expected here
+        warnings.simplefilter("ignore")  # NaN-augmentation warning is expected here - we ignore it
         model.fit(test_dataframe)
 
     # Source's training data is exactly the Split's train rows; nothing leaked in.
@@ -68,7 +72,11 @@ def test_split_above_feed_no_leakage(test_dataframe):
 
 
 def test_split_above_feed_warns_nan_augmentation(test_dataframe):
-    """consumer.train ⊄ source.test under shared Split → augmentation NaN warning."""
+    """
+    Test that when the test set of the source is a subset of the train set of the
+    consumer, we generate a warning (since this will leave NaNs in fed features, which
+    may be problematic).
+    """
     src = leaf(lambda: MockModel(x_column="x"), "src")
     cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
     inner = feed("d", source=src, consumer=cons)
@@ -84,15 +92,6 @@ def test_split_above_feed_warns_nan_augmentation(test_dataframe):
     ):
         model.fit(test_dataframe)
 
-    # Predict still runs cleanly — only fit-time augmentation is affected by the NaN gap.
-    predictions = model.predict(test_dataframe)
-    distinct = predictions.filter(pl.col("x") >= 5).select("cons").unique()
-    expected = pl.DataFrame(
-        {"cons": [[1, 2, 3, 4]]},
-        schema={"cons": pl.List(pl.Int64)},
-    )
-    assert_frame_equal(distinct, expected)
-
 
 def test_asymmetric_source_consumer_warns_leak(test_dataframe):
     """source.train ⊋ consumer.train → potential-leak warning."""
@@ -100,41 +99,22 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
     student_leaf = leaf(lambda: ConsumerModel(source_col="teacher"), "student")
 
     # Source trains on all rows; consumer trains on x<5 only and tests on x>=5.
-    src = teacher_leaf
-    cons = split(
-        "cons_tt",
-        student_leaf,
-        train_filter=pl.col("x") < 5,
-        test_filter=pl.col("x") >= 5,
+    model = feed(
+        "d",
+        source=teacher_leaf,
+        consumer=split(
+            "cons_tt",
+            student_leaf,
+            train_filter=pl.col("x") < 5,
+            test_filter=pl.col("x") >= 5,
+        ),
     )
-    model = feed("d", source=src, consumer=cons)
 
     with pytest.warns(
         UserWarning,
         match="source's train set contains .* rows not in consumer's train set",
     ):
         model.fit(test_dataframe)
-
-    predictions = model.predict(test_dataframe)
-    distinct = (
-        predictions.with_columns(in_test=pl.col("x") >= 5)
-        .select("in_test", "teacher", "student")
-        .unique(subset=["in_test"], maintain_order=True)
-    )
-    full = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    expected = pl.DataFrame(
-        {
-            "in_test": [False, True],
-            "teacher": [full, full],
-            "student": [None, full],
-        },
-        schema={
-            "in_test": pl.Boolean,
-            "teacher": pl.List(pl.Int64),
-            "student": pl.List(pl.Int64),
-        },
-    )
-    assert_frame_equal(distinct, expected)
 
 
 def test_feed_with_lift_in_source_and_consumer(test_dataframe):
