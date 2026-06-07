@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, LearnsFrom, Feed
+from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
 from pomap.interpreter import _fit
 from conftest import MockModel, ConsumerModel
 
@@ -37,11 +37,11 @@ def test_fit_split_validation_passthrough(test_dataframe):
         child=leaf_node,
         train_filter=pl.col("x") < 5,
         test_filter=pl.col("x") >= 8,
-        validation_filter=pl.col("x").is_between(5, 7, closed='both'),
+        validation_filter=pl.col("x").is_between(5, 7, closed="both"),
     )
     models, _ = _fit(node, test_dataframe)
     assert models["m"].seen == [1, 2, 3, 4]
-    assert models["m"].val_seen == [5,6, 7]
+    assert models["m"].val_seen == [5, 6, 7]
 
 
 # TODO: this tests composition, not fit behaviour itself - let's move to test_composition.py later
@@ -63,6 +63,7 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
     assert set(models.keys()) == {"model-x[category=a]"}
     # Train filters resolve to category==a (1, 2, 3) AND x>1, implies x in [2, 3]
     assert models["model-x[category=a]"].seen == [2, 3]
+
 
 # TODO this tests composition - not fit behaviour itself - let's move to test_composition.py later
 def test_fit_lift_inside_split(model_x, test_dataframe):
@@ -145,3 +146,13 @@ def test_fit_learns_from_threads_hyperparameters(test_dataframe):
 
 # ── Ensemble ──────────────────────────────────────────────────────────
 
+
+def test_fit_ensemble_fits_each_child(test_dataframe):
+    a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
+    b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
+    node = Ensemble(name="ens", models=[a, b])
+    models, _ = _fit(node, test_dataframe)
+
+    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert models["model-a"].seen == expected
+    assert models["model-b"].seen == expected

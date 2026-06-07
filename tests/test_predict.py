@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
+from pomap.nodes import Leaf, Split, Ensemble, LearnsFrom, Feed
 from pomap.interpreter import _fit, _predict
 from conftest import MockModel, ConsumerModel
 
@@ -59,8 +59,7 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
     # We add a column that says whether the row was in the test set
     # So that we can simplify the output down to in test/not in test.
     distinct = (
-        predictions
-        .with_columns(in_test=pl.col("x") >= 5)
+        predictions.with_columns(in_test=pl.col("x") >= 5)
         .select("in_test", "model-x")
         .unique(subset=["in_test"], maintain_order=True)
     )
