@@ -11,13 +11,19 @@ class MockModel:
     A passthrough model whose prediction is all the training data in
     'x_column' packed into a list. This makes it easy to understand
     which data is being seen as 'training data' by model.
+
+    If `validation_set` is supplied to fit (when the surrounding tree has a
+    `validation_filter`), its values are captured separately in `.val_seen`.
     """
 
     x_column: str
     seen: list = None
+    val_seen: list = None
 
-    def fit(self, training_set: pl.DataFrame):
+    def fit(self, training_set: pl.DataFrame, validation_set: pl.DataFrame = None):
         self.seen = training_set[self.x_column].to_list()
+        if validation_set is not None:
+            self.val_seen = validation_set[self.x_column].to_list()
 
     def predict(self, df: pl.DataFrame):
         return [self.seen] * df.shape[0]

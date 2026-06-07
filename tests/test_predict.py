@@ -180,9 +180,7 @@ class _OffsetModel:
 
 
 def _mean_of_source_training_data(model, df):
-    preds = model.predict(df)
-    training_values = preds["source"][0]
-    return {"offset": sum(training_values) / len(training_values)}
+    return {"offset": model.predict(df)["source"].list.mean().first()}
 
 
 def test_predict_learns_from(test_dataframe):

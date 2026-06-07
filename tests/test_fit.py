@@ -16,25 +16,6 @@ def test_fit_lift_fans_out(lift_x, test_dataframe):
     assert models["model-x[category=c]"].seen == [7, 8, 9]
 
 
-def test_fit_lift_nested_decorates_labels(model_x, test_dataframe):
-    inner = Lift(
-        name="sign",
-        child=model_x,
-        values=["pos"],
-        train_filter=lambda v: pl.col("x") > 0,
-        test_filter=lambda v: pl.col("x") > 0,
-    )
-    outer = Lift(
-        name="category",
-        child=inner,
-        values=["a"],
-        train_filter=lambda v: pl.col("category") == pl.lit(v),
-        test_filter=lambda v: pl.col("category") == pl.lit(v),
-    )
-    models, _ = _fit(outer, test_dataframe)
-    assert set(models.keys()) == {"model-x[category=a, sign=pos]"}
-
-
 # ── Split ─────────────────────────────────────────────────────────
 
 
@@ -50,32 +31,20 @@ def test_fit_split_applies_train_filter(model_x, test_dataframe):
 
 
 def test_fit_split_validation_passthrough(test_dataframe):
-    @dataclass
-    class ValModel:
-        train_seen: list = None
-        val_seen: list = None
-
-        def fit(self, training_set, validation_set):
-            self.train_seen = training_set["x"].to_list()
-            self.val_seen = validation_set["x"].to_list()
-
-        def predict(self, df):
-            return [self.train_seen] * len(df)
-
-    leaf_node = Leaf(label="m", factory=lambda: ValModel())
+    leaf_node = Leaf(label="m", factory=lambda: MockModel(x_column="x"))
     node = Split(
         name="tt",
         child=leaf_node,
         train_filter=pl.col("x") < 5,
-        test_filter=pl.col("x") >= 5,
-        validation_filter=pl.col("x").is_in([6, 8]),
+        test_filter=pl.col("x") >= 8,
+        validation_filter=pl.col("x").is_between(5, 7, closed='both'),
     )
     models, _ = _fit(node, test_dataframe)
-    assert models["m"].train_seen == [1, 2, 3, 4]
-    assert models["m"].val_seen == [6, 8]
+    assert models["m"].seen == [1, 2, 3, 4]
+    assert models["m"].val_seen == [5,6, 7]
 
 
-# Composition-flavored fit tests — may migrate to test_commutativity.py later
+# TODO: this tests composition, not fit behaviour itself - let's move to test_composition.py later
 def test_fit_split_inside_lift(model_x, test_dataframe):
     inner = Split(
         name="tt",
@@ -92,10 +61,10 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
     )
     models, _ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
-    # train: category=a AND x>1 → x in [2, 3]
+    # Train filters resolve to category==a (1, 2, 3) AND x>1, implies x in [2, 3]
     assert models["model-x[category=a]"].seen == [2, 3]
 
-
+# TODO this tests composition - not fit behaviour itself - let's move to test_composition.py later
 def test_fit_lift_inside_split(model_x, test_dataframe):
     inner = Lift(
         name="category",
@@ -148,9 +117,7 @@ class _OffsetModel:
 
 
 def _mean_of_source_training_data(model, df):
-    preds = model.predict(df)
-    training_values = preds["source"][0]
-    return {"offset": sum(training_values) / len(training_values)}
+    return {"offset": model.predict(df)["source"].list.mean().first()}
 
 
 def test_fit_learns_from_threads_hyperparameters(test_dataframe):
@@ -174,3 +141,7 @@ def test_fit_learns_from_threads_hyperparameters(test_dataframe):
     assert hyperparameters["offset"] == 5.0
     # learner.value = mean(x) + offset = 5.0 + 5.0 = 10.0
     assert models["learner"].value == 10.0
+
+
+# ── Ensemble ──────────────────────────────────────────────────────────
+

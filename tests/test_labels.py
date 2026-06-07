@@ -15,6 +15,25 @@ def test_labels_lift_decorates_per_value(lift_x):
     }
 
 
+def test_labels_nested_lifts_compose_dimensions(model_x):
+    inner = Lift(
+        name="sign",
+        child=model_x,
+        values=["pos"],
+        train_filter=lambda v: pl.col("x") > 0,
+        test_filter=lambda v: pl.col("x") > 0,
+    )
+    outer = Lift(
+        name="category",
+        child=inner,
+        values=["a"],
+        train_filter=lambda v: pl.col("category") == pl.lit(v),
+        test_filter=lambda v: pl.col("category") == pl.lit(v),
+    )
+    # Outer Lift's dimension appears first, inner's second.
+    assert set(_collect_labels(outer)) == {"model-x[category=a, sign=pos]"}
+
+
 # ── Split ─────────────────────────────────────────────────────────
 
 
