@@ -42,6 +42,7 @@ class ConsumerModel:
 
 @pytest.fixture
 def test_dataframe():
+    # We have both category and fold because each is more interpretable in specific contexts
     return pl.DataFrame(
         {
             "x": [1, 2, 3, 4, 5, 6, 7, 8, 9],
