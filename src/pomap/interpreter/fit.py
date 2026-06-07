@@ -1,14 +1,12 @@
 import warnings
 
 from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
-from .labels import _make_label, _collect_labels
+from .labels import _make_label
 from .masks import _collect_masks
 from .predict import _Model, _predict
-from typing import Iterator, Tuple, Any, Optional
-from polars import DataFrame, Series, Expr, lit
-from dataclasses import dataclass
+from typing import Tuple, Any
+from polars import DataFrame, Expr, lit
 from inspect import signature
-
 
 
 def _fit(
