@@ -118,15 +118,19 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
 
 
 def test_feed_with_lift_in_source_and_consumer(test_dataframe):
+    """
+    Tests combining lift with feed. The sources and consumers are each
+    lifted separately, then passed through a feed node.
+    """
     teacher = leaf(lambda: MockModel(x_column="x"), "teacher")
-    student = leaf(lambda: ConsumerModel(source_col="teacher_signal"), "student")
+    student = leaf(lambda: ConsumerModel(source_col="cv_teacher"), "student")
 
     # CV cross-fitting via Lift inside source. Each teacher fold v trains on
     # `fold != v` and predicts on `fold == v`; the coalesce produces a single
     # column of out-of-fold predictions covering all rows.
     source = lift(
         teacher,
-        name="teacher_signal",
+        name="cv_teacher",
         values=[0, 1, 2],
         train_filter=lambda v: pl.col("fold") != v,
         test_filter=lambda v: pl.col("fold") == v,
@@ -134,7 +138,7 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     )
     consumer = lift(
         student,
-        name="cv_fold",
+        name="cv_student",
         values=[0, 1, 2],
         train_filter=lambda v: pl.col("fold") != v,
         test_filter=lambda v: pl.col("fold") == v,
@@ -146,52 +150,60 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
         warnings.simplefilter("error")
         model.fit(test_dataframe)
 
-    # Fit-side: each teacher trained only on rows where fold != v.
-    assert model.models["teacher[teacher_signal=0]"].seen == [4, 5, 6, 7, 8, 9]
-    assert model.models["teacher[teacher_signal=1]"].seen == [1, 2, 3, 7, 8, 9]
-    assert model.models["teacher[teacher_signal=2]"].seen == [1, 2, 3, 4, 5, 6]
+    # teacher[cv_teacher=i] trains on every row where fold != i — i.e. the data
+    # with fold i excluded. That same list is what the teacher predicts on its
+    # held-out rows (fold == i), so it's also what shows up in the `cv_teacher`
+    # column for fold=i rows after the coalesce.
+    data_excluding_fold_0 = [4, 5, 6, 7, 8, 9]
+    data_excluding_fold_1 = [1, 2, 3, 7, 8, 9]
+    data_excluding_fold_2 = [1, 2, 3, 4, 5, 6]
 
-    # student[cv_fold=0] trains on fold=1 and fold=2 rows; teacher_signal per
-    # row is the training list of whichever teacher was responsible for that
-    # fold, and no row's own x appears in the list it saw (OOF).
-    assert model.models["student[cv_fold=0]"].seen == (
-        [[1, 2, 3, 7, 8, 9]] * 3  # fold=1 rows ← teacher[teacher_signal=1].seen
-        + [[1, 2, 3, 4, 5, 6]] * 3  # fold=2 rows ← teacher[teacher_signal=2].seen
-    )
+    assert model.models["teacher[cv_teacher=0]"].seen == data_excluding_fold_0
+    assert model.models["teacher[cv_teacher=1]"].seen == data_excluding_fold_1
+    assert model.models["teacher[cv_teacher=2]"].seen == data_excluding_fold_2
+
+
+    # The student will see the predictions of the teacher - recall that the teacher
+    # Just stores all the training data it saw. Hence, we expect that on each fold i
+    # The student will be passed all the data from fold != i by the teacher.
+    assert model.models["student[cv_student=0]"].seen == [
+        data_excluding_fold_1,
+        data_excluding_fold_2,
+    ]
 
     # Predict-side currently fails — `_predict` is a flat loop and runs
     # `_apply_aggregations` only at the end, so the consumer's `.predict` reads
-    # `pl.col("teacher_signal")` before that column has been produced. Tracked
+    # `pl.col("cv_teacher")` before that column has been produced. Tracked
     # as "Predict-time aggregation ordering for Feed" in CLAUDE.md. Leaving the
     # call in deliberately so the test fails until the fix lands.
     predictions = model.predict(test_dataframe)
     distinct = (
         predictions.select(
             "fold",
-            "teacher_signal",
-            "student[cv_fold=0]",
-            "student[cv_fold=1]",
-            "student[cv_fold=2]",
+            "cv_teacher",
+            "student[cv_student=0]",
+            "student[cv_student=1]",
+            "student[cv_student=2]",
         ).unique(subset=["fold"], maintain_order=True)
     )
     expected = pl.DataFrame(
         {
             "fold": [0, 1, 2],
-            "teacher_signal": [
-                [4, 5, 6, 7, 8, 9],
-                [1, 2, 3, 7, 8, 9],
-                [1, 2, 3, 4, 5, 6],
+            "cv_teacher": [
+                data_excluding_fold_0,
+                data_excluding_fold_1,
+                data_excluding_fold_2,
             ],
-            "student[cv_fold=0]": [[4, 5, 6, 7, 8, 9], None, None],
-            "student[cv_fold=1]": [None, [1, 2, 3, 7, 8, 9], None],
-            "student[cv_fold=2]": [None, None, [1, 2, 3, 4, 5, 6]],
+            "student[cv_student=0]": [data_excluding_fold_0, None, None],
+            "student[cv_student=1]": [None, data_excluding_fold_1, None],
+            "student[cv_student=2]": [None, None, data_excluding_fold_2],
         },
         schema={
             "fold": pl.Int64,
-            "teacher_signal": pl.List(pl.Int64),
-            "student[cv_fold=0]": pl.List(pl.Int64),
-            "student[cv_fold=1]": pl.List(pl.Int64),
-            "student[cv_fold=2]": pl.List(pl.Int64),
+            "cv_teacher": pl.List(pl.Int64),
+            "student[cv_student=0]": pl.List(pl.Int64),
+            "student[cv_student=1]": pl.List(pl.Int64),
+            "student[cv_student=2]": pl.List(pl.Int64),
         },
     )
     assert_frame_equal(distinct, expected)

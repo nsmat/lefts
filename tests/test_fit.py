@@ -129,9 +129,7 @@ def test_fit_feed_basic(test_dataframe):
 
     expected_source_training = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert models["source"].seen == expected_source_training
-    # Consumer's training rows each received the source's training list as their
-    # "source" feature, so its `.seen` is N copies of that list.
-    assert models["consumer"].seen == [expected_source_training] * 9
+    assert models["consumer"].seen == [expected_source_training]
 
 
 # ── LearnsFrom ────────────────────────────────────────────────────

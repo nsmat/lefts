@@ -27,14 +27,17 @@ class MockModel:
 class ConsumerModel:
     """
     For use in Feed based setups - passes the exact values
-    through from the teacher so we retain maximum visibility
+    through from the teacher so we retain maximum visibility.
+    
+    To keep the tests understandable, it only stores the distinct values
+    seen on the source column.
     """
 
     source_col: str
     seen: list = None
 
     def fit(self, training_set: pl.DataFrame):
-        self.seen = training_set[self.source_col].to_list()
+        self.seen = training_set[self.source_col].unique(maintain_order=True).to_list()
 
     def predict(self, df: pl.DataFrame):
         return df[self.source_col].to_list()
