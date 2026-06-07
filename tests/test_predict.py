@@ -15,7 +15,7 @@ def test_predict_lift_per_value_columns(lift_x, test_dataframe):
     predictions = _predict(lift_x, models, test_dataframe)
 
     # All rows within a category have identical prediction columns, so we can
-    # dedup to one row per category.
+    # deduplicate to one row per category.
     distinct = predictions.select(
         "category",
         "model-x[category=a]",
@@ -23,6 +23,9 @@ def test_predict_lift_per_value_columns(lift_x, test_dataframe):
         "model-x[category=c]",
     ).unique(subset=["category"], maintain_order=True)
 
+    # Expected pattern is that for category i:
+    # On rows where category = i we see all training data that belonged to category i
+    # On rows where category != i we generate no prediction (None)
     expected = pl.DataFrame(
         {
             "category": ["a", "b", "c"],
@@ -53,8 +56,8 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    # Two groups: rows in the test mask (one shared prediction list) and rows
-    # outside it (null).
+    # We add a column that says whether the row was in the test set
+    # So that we can simplify the output down to in test/not in test.
     distinct = (
         predictions
         .with_columns(in_test=pl.col("x") >= 5)
@@ -62,6 +65,8 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
         .unique(subset=["in_test"], maintain_order=True)
     )
 
+    # The expected pattern is that we produce None outside the test set
+    # And reproduce the training data on the test set.
     expected = pl.DataFrame(
         {
             "in_test": [False, True],
@@ -83,6 +88,8 @@ def test_predict_ensemble_separate_columns(test_dataframe):
     predictions = _predict(ensemble, models, test_dataframe)
 
     distinct = predictions.select("model-a", "model-b").unique()
+
+    # The expectation is that both models produce the train data everywhere
     expected = pl.DataFrame(
         {
             "model-a": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
@@ -94,12 +101,14 @@ def test_predict_ensemble_separate_columns(test_dataframe):
 
 
 def test_predict_ensemble_aggregate_collapses(test_dataframe):
+    # In this test we sum across the ensemble, so the final output
+    # Should be double the x-column, on every row.
     a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
     b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
     ensemble = Ensemble(
         name="combined",
         models=[a, b],
-        aggregate_with=pl.coalesce,
+        aggregate_with=pl.sum_horizontal,
     )
     models, _ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
@@ -109,22 +118,24 @@ def test_predict_ensemble_aggregate_collapses(test_dataframe):
 
     distinct = predictions.select("combined").unique()
     expected = pl.DataFrame(
-        {"combined": [[1, 2, 3, 4, 5, 6, 7, 8, 9]]},
+        {"combined": [[2, 4, 6, 8, 10, 12, 14, 16, 18]]},
         schema={"combined": pl.List(pl.Int64)},
     )
     assert_frame_equal(distinct, expected)
 
 
 def test_predict_ensemble_nested_aggregates(test_dataframe):
+    # We aggregate one ensemble by summing, then the second, providing
+    # 3x the input column as the final prediction.
     inner_a = Leaf(label="inner-a", factory=lambda: MockModel(x_column="x"))
     inner_b = Leaf(label="inner-b", factory=lambda: MockModel(x_column="x"))
     outer_c = Leaf(label="outer-c", factory=lambda: MockModel(x_column="x"))
 
     inner = Ensemble(
-        name="inner", models=[inner_a, inner_b], aggregate_with=pl.coalesce
+        name="inner", models=[inner_a, inner_b], aggregate_with=pl.sum_horizontal
     )
     outer = Ensemble(
-        name="outer", models=[inner, outer_c], aggregate_with=pl.coalesce
+        name="outer", models=[inner, outer_c], aggregate_with=pl.sum_horizontal
     )
 
     models, _ = _fit(outer, test_dataframe)
@@ -135,7 +146,7 @@ def test_predict_ensemble_nested_aggregates(test_dataframe):
 
     distinct = predictions.select("outer").unique()
     expected = pl.DataFrame(
-        {"outer": [[1, 2, 3, 4, 5, 6, 7, 8, 9]]},
+        {"outer": [[3, 6, 9, 12, 15, 18, 21, 24, 27]]},
         schema={"outer": pl.List(pl.Int64)},
     )
     assert_frame_equal(distinct, expected)
@@ -200,6 +211,10 @@ def test_predict_learns_from(test_dataframe):
     predictions = _predict(node, models, test_dataframe)
 
     distinct = predictions.select("source", "learner").unique()
+
+    # Expectation is that source sees the training data.
+    # The learner should see the mean of the training data + the mean of the training data
+    # = 5 + 5 = 10
     expected = pl.DataFrame(
         {
             "source": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],

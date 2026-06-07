@@ -8,28 +8,15 @@ from conftest import MockModel, ConsumerModel
 
 
 def test_plain_feed_no_warnings(test_dataframe):
+    """A plain Feed with no row filters should fit without emitting any warning.
+    Predict-side correctness for this shape is covered by test_predict_feed_source_then_consumer."""
     src = leaf(lambda: MockModel(x_column="x"), "src")
     cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
     model = feed("d", source=src, consumer=cons)
 
     with warnings.catch_warnings():
-        warnings.simplefilter("error")  # Will crash (failing test) if fitting throws any warnings
-
+        warnings.simplefilter("error")
         model.fit(test_dataframe)
-
-    predictions = model.predict(test_dataframe)
-    distinct = predictions.select("src", "cons").unique()
-
-    # Given both source and consumer are leaves, they train on
-    # The entire dataframe (x \in [1, ..., 9]
-    expected = pl.DataFrame(
-        {
-            "src": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
-            "cons": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
-        },
-        schema={"src": pl.List(pl.Int64), "cons": pl.List(pl.Int64)},
-    )
-    assert_frame_equal(distinct, expected)
 
 
 def test_split_above_feed_no_leakage(test_dataframe):
