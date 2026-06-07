@@ -1,35 +1,16 @@
-import pytest
-from dataclasses import dataclass
 import polars as pl
 
 from pomap.interface import leaf, lift, split
 
 
-@dataclass
-class MockModel:
-    x_column: str
-    value: float = None
-
-    def fit(self, training_set: pl.DataFrame):
-        self.value = training_set[self.x_column].mean()
-
-    def predict(self, df: pl.DataFrame):
-        return [self.value] * len(df)
+def _make_leaf(label):
+    return leaf(lambda: None, label)
 
 
-@pytest.fixture
-def test_dataframe():
-    df_a = pl.DataFrame({"x": [2.0, 3.0, 4.0], "category": ["a", "a", "a"]})
-    df_b = pl.DataFrame({"x": [10.0, 15.0, 20.0], "category": ["b", "b", "b"]})
-    df_c = pl.DataFrame({"x": [4.0, 6.0, 8.0], "category": ["c", "c", "c"]})
-    return pl.concat([df_a, df_b, df_c])
+# ── Leaf ──────────────────────────────────────────────────────────
 
 
-def _make_leaf(label: str):
-    return leaf(lambda: MockModel(x_column="x"), label)
-
-
-def test_leaf(test_dataframe):
+def test_masks_leaf_defaults_to_all_true(test_dataframe):
     marked = _make_leaf("m").mark_train_validation_test_rows(test_dataframe)
     assert {"m__train", "m__test"} <= set(marked.columns)
     assert "m__validation" not in marked.columns
@@ -37,7 +18,10 @@ def test_leaf(test_dataframe):
     assert marked["m__test"].all()
 
 
-def test_lift(test_dataframe):
+# ── Lift ──────────────────────────────────────────────────────────
+
+
+def test_masks_lift_per_value_filter(test_dataframe):
     model = lift(
         _make_leaf("m"),
         values=["a"],
@@ -52,7 +36,10 @@ def test_lift(test_dataframe):
     assert set(test["category"].unique().to_list()) == {"b", "c"}
 
 
-def test_split(test_dataframe):
+# ── Split ─────────────────────────────────────────────────────────
+
+
+def test_masks_split_filter(test_dataframe):
     model = split(
         "tt",
         _make_leaf("m"),
@@ -66,7 +53,7 @@ def test_split(test_dataframe):
     assert (test["x"] >= 10).all()
 
 
-def test_split_with_validation(test_dataframe):
+def test_masks_split_with_validation(test_dataframe):
     model = split(
         "tt",
         _make_leaf("m"),
