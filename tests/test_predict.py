@@ -13,7 +13,7 @@ def test_predict_lift_per_value_columns(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
     predictions = _predict(lift_x, models, test_dataframe)
 
-    expected = {"a": [2, 3, 4], "b": [10, 15, 20], "c": [4, 6, 8]}
+    expected = {"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]}
     for cat in ["a", "b", "c"]:
         rows = predictions.filter(category=cat)
         col = f"model-x[category={cat}]"
@@ -27,76 +27,78 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
     node = Split(
         name="tt",
         child=model_x,
-        train_filter=pl.col("x") < 10,
-        test_filter=pl.col("x") >= 10,
+        train_filter=pl.col("x") < 5,
+        test_filter=pl.col("x") >= 5,
     )
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    expected_training = [2, 3, 4, 4, 6, 8]
-    on_test = predictions.filter(pl.col("x") >= 10)
+    expected_training = [1, 2, 3, 4]
+    on_test = predictions.filter(pl.col("x") >= 5)
     assert on_test["model-x"].to_list() == [expected_training] * on_test.height
 
-    off_test = predictions.filter(pl.col("x") < 10)
+    off_test = predictions.filter(pl.col("x") < 5)
     assert off_test["model-x"].is_null().all()
 
 
 # ── Ensemble ──────────────────────────────────────────────────────
 
 
-def test_predict_ensemble_separate_columns(ensemble_x1_x2, test_dataframe):
-    models, _ = _fit(ensemble_x1_x2, test_dataframe)
-    predictions = _predict(ensemble_x1_x2, models, test_dataframe)
+def test_predict_ensemble_separate_columns(test_dataframe):
+    a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
+    b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
+    ensemble = Ensemble(name="ens", models=[a, b])
+    models, _ = _fit(ensemble, test_dataframe)
+    predictions = _predict(ensemble, models, test_dataframe)
 
-    expected_x = [2, 3, 4, 10, 15, 20, 4, 6, 8]
-    expected_x2 = [-2, -3, -4, -10, -15, -20, -4, -6, -8]
-    assert predictions["model-x"].to_list() == [expected_x] * 9
-    assert predictions["model-x2"].to_list() == [expected_x2] * 9
+    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert predictions["model-a"].to_list() == [expected] * 9
+    assert predictions["model-b"].to_list() == [expected] * 9
 
 
-def test_predict_ensemble_aggregate_collapses(model_x, model_x2, test_dataframe):
+def test_predict_ensemble_aggregate_collapses(test_dataframe):
+    a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
+    b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
     ensemble = Ensemble(
         name="combined",
-        models=[model_x, model_x2],
+        models=[a, b],
         aggregate_with=pl.coalesce,
     )
     models, _ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
 
     assert "combined" in predictions.columns
-    assert "model-x" not in predictions.columns
-    assert "model-x2" not in predictions.columns
+    assert "model-a" not in predictions.columns
+    assert "model-b" not in predictions.columns
 
-    # coalesce picks the first non-null per row → model-x's predictions → x training list
-    expected = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert predictions["combined"].to_list() == [expected] * 9
 
 
 def test_predict_ensemble_nested_aggregates(test_dataframe):
-    inner_x = Leaf(label="inner-x", factory=lambda: MockModel(x_column="x"))
-    inner_x2 = Leaf(label="inner-x2", factory=lambda: MockModel(x_column="x2"))
-    outer_x = Leaf(label="outer-x", factory=lambda: MockModel(x_column="x"))
+    inner_a = Leaf(label="inner-a", factory=lambda: MockModel(x_column="x"))
+    inner_b = Leaf(label="inner-b", factory=lambda: MockModel(x_column="x"))
+    outer_c = Leaf(label="outer-c", factory=lambda: MockModel(x_column="x"))
 
     inner = Ensemble(
         name="inner",
-        models=[inner_x, inner_x2],
+        models=[inner_a, inner_b],
         aggregate_with=pl.coalesce,
     )
     outer = Ensemble(
         name="outer",
-        models=[inner, outer_x],
+        models=[inner, outer_c],
         aggregate_with=pl.coalesce,
     )
 
     models, _ = _fit(outer, test_dataframe)
     predictions = _predict(outer, models, test_dataframe)
 
-    for intermediate in ("inner", "inner-x", "inner-x2", "outer-x"):
+    for intermediate in ("inner", "inner-a", "inner-b", "outer-c"):
         assert intermediate not in predictions.columns
     assert "outer" in predictions.columns
 
-    # inner's coalesce picks inner-x's predictions; outer's coalesce picks that.
-    expected = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert predictions["outer"].to_list() == [expected] * 9
 
 
@@ -112,7 +114,7 @@ def test_predict_feed_source_then_consumer(test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    expected = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert predictions["source"].to_list() == [expected] * 9
     assert predictions["consumer"].to_list() == [expected] * 9
 
@@ -154,5 +156,5 @@ def test_predict_learns_from(test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    # learner.value = mean(x) + offset = 8.0 + 8.0 = 16.0
-    assert (predictions["learner"] == 16.0).all()
+    # learner.value = mean(x) + offset = 5.0 + 5.0 = 10.0
+    assert (predictions["learner"] == 10.0).all()

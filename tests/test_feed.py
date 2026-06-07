@@ -23,8 +23,8 @@ def test_split_above_feed_no_leakage(test_dataframe):
     model = split(
         "tt",
         inner,
-        train_filter=pl.col("x") < 10,
-        test_filter=pl.col("x") >= 10,
+        train_filter=pl.col("x") < 5,
+        test_filter=pl.col("x") >= 5,
     )
 
     with warnings.catch_warnings():
@@ -32,7 +32,7 @@ def test_split_above_feed_no_leakage(test_dataframe):
         model.fit(test_dataframe)
 
     # Source's training data is exactly the Split's train rows; nothing leaked in.
-    assert model.models["src"].seen == [2, 3, 4, 4, 6, 8]
+    assert model.models["src"].seen == [1, 2, 3, 4]
 
 
 def test_split_above_feed_warns_nan_augmentation(test_dataframe):
@@ -43,8 +43,8 @@ def test_split_above_feed_warns_nan_augmentation(test_dataframe):
     model = split(
         "tt",
         inner,
-        train_filter=pl.col("x") < 10,
-        test_filter=pl.col("x") >= 10,
+        train_filter=pl.col("x") < 5,
+        test_filter=pl.col("x") >= 5,
     )
 
     with pytest.warns(
@@ -58,14 +58,14 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
     teacher_leaf = leaf(lambda: MockModel(x_column="x"), "teacher")
     student_leaf = leaf(lambda: ConsumerModel(source_col="teacher"), "student")
 
-    # Source trains on all rows; consumer trains on x<10 only and tests on x>=10.
+    # Source trains on all rows; consumer trains on x<5 only and tests on x>=5.
     # This is the leakage shape: source has seen consumer's test rows.
     src = teacher_leaf
     cons = split(
         "cons_tt",
         student_leaf,
-        train_filter=pl.col("x") < 10,
-        test_filter=pl.col("x") >= 10,
+        train_filter=pl.col("x") < 5,
+        test_filter=pl.col("x") >= 5,
     )
     model = feed("d", source=src, consumer=cons)
 

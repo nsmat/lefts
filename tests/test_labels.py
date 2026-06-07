@@ -22,7 +22,7 @@ def test_labels_split_not_decorated(model_x):
     node = Split(
         name="tt",
         child=model_x,
-        train_filter=pl.col("x") < 10,
+        train_filter=pl.col("x") < 5,
         test_filter=pl.lit(True),
     )
     assert set(_collect_labels(node)) == {"model-x"}
@@ -31,18 +31,23 @@ def test_labels_split_not_decorated(model_x):
 # ── Ensemble ──────────────────────────────────────────────────────
 
 
-def test_labels_ensemble_yields_each_child(ensemble_x1_x2):
-    assert set(_collect_labels(ensemble_x1_x2)) == {"model-x", "model-x2"}
+def test_labels_ensemble_yields_each_child():
+    a = Leaf(label="model-a", factory=lambda: None)
+    b = Leaf(label="model-b", factory=lambda: None)
+    ensemble = Ensemble(name="ens", models=[a, b])
+    assert set(_collect_labels(ensemble)) == {"model-a", "model-b"}
 
 
 # ── Aggregation halting (Lift + Ensemble) ────────────────────────
 
 
-def test_labels_aggregate_halts(model_x, model_x2):
+def test_labels_aggregate_halts():
+    a = Leaf(label="model-a", factory=lambda: None)
+    b = Leaf(label="model-b", factory=lambda: None)
     inner = Ensemble(
         name="inner",
-        models=[model_x, model_x2],
-        aggregate_with=pl.mean_horizontal,
+        models=[a, b],
+        aggregate_with=pl.coalesce,
     )
     outer = Lift(
         name="fold",
@@ -50,7 +55,7 @@ def test_labels_aggregate_halts(model_x, model_x2):
         values=[1, 2, 3],
         train_filter=lambda v: pl.lit(True),
         test_filter=lambda v: pl.lit(True),
-        aggregate_with=pl.mean_horizontal,
+        aggregate_with=pl.coalesce,
     )
     assert set(_collect_labels(outer)) == {"fold"}
     assert set(_collect_labels(inner)) == {"inner"}

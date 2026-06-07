@@ -2,15 +2,15 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Leaf, Lift, Ensemble
+from pomap.nodes import Leaf, Lift
 
 
 @dataclass
 class MockModel:
-    """Captures the training values for `x_column` into `.seen`.
-
-    `predict` returns the captured list for every row of the input df, so the
-    resulting column is a polars List column whose values are the training data.
+    """
+    A passthrough model whose prediction is all the training data in
+    'x_column' packed into a list. This makes it easy to understand
+    which data is being seen as 'training data' by model.
     """
 
     x_column: str
@@ -25,8 +25,10 @@ class MockModel:
 
 @dataclass
 class ConsumerModel:
-    """Captures the training values for `source_col` into `.seen`; predict passes
-    the source column through unchanged."""
+    """
+    For use in Feed based setups - passes the exact values
+    through from the teacher so we retain maximum visibility
+    """
 
     source_col: str
     seen: list = None
@@ -40,10 +42,12 @@ class ConsumerModel:
 
 @pytest.fixture
 def test_dataframe():
-    df_a = pl.DataFrame({"x": [2, 3, 4], "category": ["a", "a", "a"]})
-    df_b = pl.DataFrame({"x": [10, 15, 20], "category": ["b", "b", "b"]})
-    df_c = pl.DataFrame({"x": [4, 6, 8], "category": ["c", "c", "c"]})
-    return pl.concat([df_a, df_b, df_c]).with_columns(x2=-pl.col("x"))
+    return pl.DataFrame(
+        {
+            "x": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            "category": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],
+        }
+    )
 
 
 @pytest.fixture
@@ -62,11 +66,6 @@ def model_x(leaf_factory):
 
 
 @pytest.fixture
-def model_x2(leaf_factory):
-    return leaf_factory("x2")
-
-
-@pytest.fixture
 def lift_x(model_x):
     return Lift(
         name="category",
@@ -75,8 +74,3 @@ def lift_x(model_x):
         train_filter=lambda v: pl.col("category") == pl.lit(v),
         test_filter=lambda v: pl.col("category") == pl.lit(v),
     )
-
-
-@pytest.fixture
-def ensemble_x1_x2(model_x, model_x2):
-    return Ensemble(name="ensemble", models=[model_x, model_x2])

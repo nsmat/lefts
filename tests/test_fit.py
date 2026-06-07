@@ -11,9 +11,9 @@ from conftest import MockModel, ConsumerModel
 
 def test_fit_lift_fans_out(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
-    assert models["model-x[category=a]"].seen == [2, 3, 4]
-    assert models["model-x[category=b]"].seen == [10, 15, 20]
-    assert models["model-x[category=c]"].seen == [4, 6, 8]
+    assert models["model-x[category=a]"].seen == [1, 2, 3]
+    assert models["model-x[category=b]"].seen == [4, 5, 6]
+    assert models["model-x[category=c]"].seen == [7, 8, 9]
 
 
 def test_fit_lift_nested_decorates_labels(model_x, test_dataframe):
@@ -42,11 +42,11 @@ def test_fit_split_applies_train_filter(model_x, test_dataframe):
     node = Split(
         name="tt",
         child=model_x,
-        train_filter=pl.col("x") < 10,
+        train_filter=pl.col("x") < 5,
         test_filter=pl.lit(True),
     )
     models, _ = _fit(node, test_dataframe)
-    assert models["model-x"].seen == [2, 3, 4, 4, 6, 8]
+    assert models["model-x"].seen == [1, 2, 3, 4]
 
 
 def test_fit_split_validation_passthrough(test_dataframe):
@@ -67,11 +67,11 @@ def test_fit_split_validation_passthrough(test_dataframe):
         name="tt",
         child=leaf_node,
         train_filter=pl.col("x") < 5,
-        test_filter=pl.col("x") >= 10,
+        test_filter=pl.col("x") >= 5,
         validation_filter=pl.col("x").is_in([6, 8]),
     )
     models, _ = _fit(node, test_dataframe)
-    assert models["m"].train_seen == [2, 3, 4, 4]
+    assert models["m"].train_seen == [1, 2, 3, 4]
     assert models["m"].val_seen == [6, 8]
 
 
@@ -80,7 +80,7 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
     inner = Split(
         name="tt",
         child=model_x,
-        train_filter=pl.col("x") > 3,
+        train_filter=pl.col("x") > 1,
         test_filter=pl.lit(True),
     )
     outer = Lift(
@@ -92,8 +92,8 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
     )
     models, _ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
-    # train: category=a AND x>3 → only x=4
-    assert models["model-x[category=a]"].seen == [4]
+    # train: category=a AND x>1 → x in [2, 3]
+    assert models["model-x[category=a]"].seen == [2, 3]
 
 
 def test_fit_lift_inside_split(model_x, test_dataframe):
@@ -107,13 +107,13 @@ def test_fit_lift_inside_split(model_x, test_dataframe):
     outer = Split(
         name="tt",
         child=inner,
-        train_filter=pl.col("x") > 2,
+        train_filter=pl.col("x") > 1,
         test_filter=pl.lit(True),
     )
     models, _ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
-    # train: x>2 AND category=a → x in [3, 4]
-    assert models["model-x[category=a]"].seen == [3, 4]
+    # train: x>1 AND category=a → x in [2, 3]
+    assert models["model-x[category=a]"].seen == [2, 3]
 
 
 # ── Feed ──────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ def test_fit_feed_basic(test_dataframe):
     node = Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
     models, _ = _fit(node, test_dataframe)
 
-    expected_source_training = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    expected_source_training = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert models["source"].seen == expected_source_training
     # Consumer's training rows each received the source's training list as their
     # "source" feature, so its `.seen` is N copies of that list.
@@ -171,8 +171,8 @@ def test_fit_learns_from_threads_hyperparameters(test_dataframe):
     models, hyperparameters = _fit(node, test_dataframe)
 
     # source's training data is the full x column
-    assert models["source"].seen == [2, 3, 4, 10, 15, 20, 4, 6, 8]
-    # learn_logic computes the mean of source's training data → 72/9 = 8.0
-    assert hyperparameters["offset"] == 8.0
-    # learner.value = mean(x) + offset = 8.0 + 8.0 = 16.0
-    assert models["learner"].value == 16.0
+    assert models["source"].seen == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # learn_logic computes the mean of source's training data → 45/9 = 5.0
+    assert hyperparameters["offset"] == 5.0
+    # learner.value = mean(x) + offset = 5.0 + 5.0 = 10.0
+    assert models["learner"].value == 10.0

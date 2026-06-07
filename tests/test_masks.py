@@ -43,14 +43,14 @@ def test_masks_split_filter(test_dataframe):
     model = split(
         "tt",
         _make_leaf("m"),
-        train_filter=pl.col("x") < 10,
-        test_filter=pl.col("x") >= 10,
+        train_filter=pl.col("x") < 5,
+        test_filter=pl.col("x") >= 5,
     )
     marked = model.mark_train_validation_test_rows(test_dataframe)
     train = marked.filter(pl.col("m__train"))
     test = marked.filter(pl.col("m__test"))
-    assert (train["x"] < 10).all()
-    assert (test["x"] >= 10).all()
+    assert (train["x"] < 5).all()
+    assert (test["x"] >= 5).all()
 
 
 def test_masks_split_with_validation(test_dataframe):
@@ -58,7 +58,7 @@ def test_masks_split_with_validation(test_dataframe):
         "tt",
         _make_leaf("m"),
         train_filter=pl.col("x") < 5,
-        test_filter=pl.col("x") >= 10,
+        test_filter=pl.col("x") >= 5,
         validation_filter=pl.col("x").is_in([6, 8]),
     )
     marked = model.mark_train_validation_test_rows(test_dataframe)
