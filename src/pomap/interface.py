@@ -3,7 +3,10 @@ from typing import Any, Callable, Iterable
 
 from polars import DataFrame
 
-from .interpreter import _fit, _Model, _print_tree, _collect_labels, _collect_masks
+from .interpreter.fit import _fit
+from .interpreter.predict import _Model
+from .interpreter.masks import _collect_masks
+from .interpreter.labels import _print_tree, _collect_labels
 from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift, Split
 from .validation import _validate
 

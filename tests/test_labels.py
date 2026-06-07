@@ -1,7 +1,7 @@
 import polars as pl
 
 from pomap.nodes import Lift, Leaf, Split, Ensemble, Feed, LearnsFrom
-from pomap.interpreter import _collect_labels
+from pomap.interpreter.labels import _collect_labels
 
 
 # ── Lift ──────────────────────────────────────────────────────────

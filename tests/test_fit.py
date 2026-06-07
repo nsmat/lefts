@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
-from pomap.interpreter import _fit
+from pomap.interpreter.fit import _fit
 from conftest import MockModel, ConsumerModel
 
 

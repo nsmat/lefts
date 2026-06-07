@@ -3,7 +3,8 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 from pomap.nodes import Leaf, Split, Ensemble, LearnsFrom, Feed
-from pomap.interpreter import _fit, _predict
+from pomap.interpreter.fit import _fit
+from pomap.interpreter.predict import _predict
 from conftest import MockModel, ConsumerModel
 
 
