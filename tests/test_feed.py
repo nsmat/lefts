@@ -3,7 +3,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.interface import leaf, split, feed
+from pomap.interface import leaf, lift, split, feed
 
 
 @dataclass
@@ -20,7 +20,8 @@ class MockModel:
 
 @dataclass
 class ConsumerModel:
-    """Reads the source column during fit; predicts whatever it learned."""
+    """Acts as a passthrough for the teacher, so we can inspect
+    Whatever the teacher was feeding"""
 
     source_col: str
     value: float = None
@@ -107,3 +108,55 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
         match="source's train set contains .* rows not in consumer's train set",
     ):
         model.fit(test_dataframe)
+
+
+def test_feed_with_lift_in_source_and_consumer():
+    df = pl.DataFrame(
+        {
+            "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            "fold": [0, 0, 1, 1, 2, 2, 3, 3],
+        }
+    )
+
+    teacher = leaf(lambda: MockModel(x_column="x"), "teacher")
+    student = leaf(lambda: ConsumerModel(source_col="teacher_signal"), "student")
+
+    # The following trains a 'leak free' teacher signal
+    # For fold 0, the teacher trains on folds 1, 2, 3
+    # And gives predictions on fold 0.
+
+    # Likewise For fold 1, the student trains on folds 0, 2, 3
+    # It's teacher signal on fold 1 rows will be predicted
+    # only from data that was available to fold 1 at test time
+    source = lift(
+        teacher,
+        name="teacher_signal",
+        values=[0, 1, 2, 3],
+        train_filter=lambda v: pl.col("fold") != v,
+        test_filter=lambda v: pl.col("fold") == v,
+        aggregate_with=pl.coalesce,
+    )
+    consumer = lift(
+        student,
+        name="cv_fold",
+        values=[0, 1, 2, 3],
+        train_filter=lambda v: pl.col("fold") != v,
+        test_filter=lambda v: pl.col("fold") == v,
+    )
+
+    model = feed("d", source=source, consumer=consumer)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        model.fit(df)
+
+    expected_keys = {f"teacher[teacher_signal={v}]" for v in range(4)} | {
+        f"student[cv_fold={v}]" for v in range(4)
+    }
+    assert set(model.models.keys()) == expected_keys
+
+    # Each teacher trained on rows where fold != v — no leakage.
+    # fold=0 leaf trains on x in [3,4,5,6,7,8], mean = 5.5
+    assert model.models["teacher[teacher_signal=0]"].value == 5.5
+    # fold=3 leaf trains on x in [1,2,3,4,5,6], mean = 3.5
+    assert model.models["teacher[teacher_signal=3]"].value == 3.5
