@@ -302,10 +302,14 @@ def _fit(
                 False,
                 precomputed_masks,
             )
-            source_precomputed_masks = {
-                label: precomputed_masks[label]
-                for label in _collect_masks(source, label_context)
-            }
+
+            # Predict will loop through every label which keys the precomputed_masks
+            # So before running predict on the source we need to subset down to
+            # Just the columns we need
+            source_labels = _collect_masks(source, label_context).keys()
+            source_precomputed_masks = {label: precomputed_masks[label] for label in source_labels}
+
+            # We run predict with the source model, so the consumer has predictions available.
             augmented_df = _predict(
                 source,
                 source_models,
