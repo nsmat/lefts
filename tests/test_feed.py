@@ -76,24 +76,17 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
         model.fit(test_dataframe)
 
 
-def test_feed_with_lift_in_source_and_consumer():
-    df = pl.DataFrame(
-        {
-            "x": [1, 2, 3, 4, 5, 6, 7, 8],
-            "fold": [0, 0, 1, 1, 2, 2, 3, 3],
-        }
-    )
-
+def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     teacher = leaf(lambda: MockModel(x_column="x"), "teacher")
     student = leaf(lambda: ConsumerModel(source_col="teacher_signal"), "student")
 
     # CV cross-fitting via Lift inside source. Each teacher fold v trains on
     # `fold != v` and predicts on `fold == v`; the coalesce produces a single
-    # column of OOF predictions covering all rows.
+    # column of out-of-fold predictions covering all rows.
     source = lift(
         teacher,
         name="teacher_signal",
-        values=[0, 1, 2, 3],
+        values=[0, 1, 2],
         train_filter=lambda v: pl.col("fold") != v,
         test_filter=lambda v: pl.col("fold") == v,
         aggregate_with=pl.coalesce,
@@ -101,7 +94,7 @@ def test_feed_with_lift_in_source_and_consumer():
     consumer = lift(
         student,
         name="cv_fold",
-        values=[0, 1, 2, 3],
+        values=[0, 1, 2],
         train_filter=lambda v: pl.col("fold") != v,
         test_filter=lambda v: pl.col("fold") == v,
     )
@@ -110,22 +103,22 @@ def test_feed_with_lift_in_source_and_consumer():
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        model.fit(df)
+        model.fit(test_dataframe)
 
-    expected_keys = {f"teacher[teacher_signal={v}]" for v in range(4)} | {
-        f"student[cv_fold={v}]" for v in range(4)
+    expected_keys = {f"teacher[teacher_signal={v}]" for v in range(3)} | {
+        f"student[cv_fold={v}]" for v in range(3)
     }
     assert set(model.models.keys()) == expected_keys
 
     # Each teacher trained only on rows where fold != v.
-    assert model.models["teacher[teacher_signal=0]"].seen == [3, 4, 5, 6, 7, 8]
-    assert model.models["teacher[teacher_signal=3]"].seen == [1, 2, 3, 4, 5, 6]
+    assert model.models["teacher[teacher_signal=0]"].seen == [4, 5, 6, 7, 8, 9]
+    assert model.models["teacher[teacher_signal=2]"].seen == [1, 2, 3, 4, 5, 6]
 
     # OOF check on the student side: for each of student[cv_fold=0]'s training
     # rows, the teacher_signal it saw was produced by a teacher that excluded
     # that row, so the row's own x value must NOT appear in the teacher_signal
     # list it was trained on.
     student_seen = model.models["student[cv_fold=0]"].seen
-    student_train_xs = df.filter(pl.col("fold") != 0)["x"].to_list()
+    student_train_xs = test_dataframe.filter(pl.col("fold") != 0)["x"].to_list()
     for x_val, teacher_signal_list in zip(student_train_xs, student_seen):
         assert x_val not in teacher_signal_list
