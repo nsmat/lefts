@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, LearnsFrom, Feed
+from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
 from pomap.interpreter import _fit
 from conftest import MockModel, ConsumerModel
 
@@ -145,3 +145,13 @@ def test_fit_learns_from_threads_hyperparameters(test_dataframe):
 
 # ── Ensemble ──────────────────────────────────────────────────────────
 
+
+def test_fit_ensemble_fits_each_child(test_dataframe):
+    a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
+    b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
+    node = Ensemble(name="ens", models=[a, b])
+    models, _ = _fit(node, test_dataframe)
+
+    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert models["model-a"].seen == expected
+    assert models["model-b"].seen == expected
