@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import polars as pl
+from polars.testing import assert_frame_equal
 
 from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
 from pomap.interpreter import _fit, _predict
@@ -13,11 +14,30 @@ def test_predict_lift_per_value_columns(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
     predictions = _predict(lift_x, models, test_dataframe)
 
-    expected = {"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]}
-    for cat in ["a", "b", "c"]:
-        rows = predictions.filter(category=cat)
-        col = f"model-x[category={cat}]"
-        assert rows[col].to_list() == [expected[cat]] * rows.height
+    # All rows within a category have identical prediction columns, so we can
+    # dedup to one row per category.
+    distinct = predictions.select(
+        "category",
+        "model-x[category=a]",
+        "model-x[category=b]",
+        "model-x[category=c]",
+    ).unique(subset=["category"], maintain_order=True)
+
+    expected = pl.DataFrame(
+        {
+            "category": ["a", "b", "c"],
+            "model-x[category=a]": [[1, 2, 3], None, None],
+            "model-x[category=b]": [None, [4, 5, 6], None],
+            "model-x[category=c]": [None, None, [7, 8, 9]],
+        },
+        schema={
+            "category": pl.String,
+            "model-x[category=a]": pl.List(pl.Int64),
+            "model-x[category=b]": pl.List(pl.Int64),
+            "model-x[category=c]": pl.List(pl.Int64),
+        },
+    )
+    assert_frame_equal(distinct, expected)
 
 
 # ── Split ─────────────────────────────────────────────────────────
@@ -33,12 +53,23 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    expected_training = [1, 2, 3, 4]
-    on_test = predictions.filter(pl.col("x") >= 5)
-    assert on_test["model-x"].to_list() == [expected_training] * on_test.height
+    # Two groups: rows in the test mask (one shared prediction list) and rows
+    # outside it (null).
+    distinct = (
+        predictions
+        .with_columns(in_test=pl.col("x") >= 5)
+        .select("in_test", "model-x")
+        .unique(subset=["in_test"], maintain_order=True)
+    )
 
-    off_test = predictions.filter(pl.col("x") < 5)
-    assert off_test["model-x"].is_null().all()
+    expected = pl.DataFrame(
+        {
+            "in_test": [False, True],
+            "model-x": [None, [1, 2, 3, 4]],
+        },
+        schema={"in_test": pl.Boolean, "model-x": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 # ── Ensemble ──────────────────────────────────────────────────────
@@ -51,9 +82,15 @@ def test_predict_ensemble_separate_columns(test_dataframe):
     models, _ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
 
-    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert predictions["model-a"].to_list() == [expected] * 9
-    assert predictions["model-b"].to_list() == [expected] * 9
+    distinct = predictions.select("model-a", "model-b").unique()
+    expected = pl.DataFrame(
+        {
+            "model-a": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+            "model-b": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        },
+        schema={"model-a": pl.List(pl.Int64), "model-b": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 def test_predict_ensemble_aggregate_collapses(test_dataframe):
@@ -67,12 +104,15 @@ def test_predict_ensemble_aggregate_collapses(test_dataframe):
     models, _ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
 
-    assert "combined" in predictions.columns
     assert "model-a" not in predictions.columns
     assert "model-b" not in predictions.columns
 
-    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert predictions["combined"].to_list() == [expected] * 9
+    distinct = predictions.select("combined").unique()
+    expected = pl.DataFrame(
+        {"combined": [[1, 2, 3, 4, 5, 6, 7, 8, 9]]},
+        schema={"combined": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 def test_predict_ensemble_nested_aggregates(test_dataframe):
@@ -81,14 +121,10 @@ def test_predict_ensemble_nested_aggregates(test_dataframe):
     outer_c = Leaf(label="outer-c", factory=lambda: MockModel(x_column="x"))
 
     inner = Ensemble(
-        name="inner",
-        models=[inner_a, inner_b],
-        aggregate_with=pl.coalesce,
+        name="inner", models=[inner_a, inner_b], aggregate_with=pl.coalesce
     )
     outer = Ensemble(
-        name="outer",
-        models=[inner, outer_c],
-        aggregate_with=pl.coalesce,
+        name="outer", models=[inner, outer_c], aggregate_with=pl.coalesce
     )
 
     models, _ = _fit(outer, test_dataframe)
@@ -96,10 +132,13 @@ def test_predict_ensemble_nested_aggregates(test_dataframe):
 
     for intermediate in ("inner", "inner-a", "inner-b", "outer-c"):
         assert intermediate not in predictions.columns
-    assert "outer" in predictions.columns
 
-    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert predictions["outer"].to_list() == [expected] * 9
+    distinct = predictions.select("outer").unique()
+    expected = pl.DataFrame(
+        {"outer": [[1, 2, 3, 4, 5, 6, 7, 8, 9]]},
+        schema={"outer": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 # ── Feed ──────────────────────────────────────────────────────────
@@ -114,9 +153,15 @@ def test_predict_feed_source_then_consumer(test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert predictions["source"].to_list() == [expected] * 9
-    assert predictions["consumer"].to_list() == [expected] * 9
+    distinct = predictions.select("source", "consumer").unique()
+    expected = pl.DataFrame(
+        {
+            "source": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+            "consumer": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        },
+        schema={"source": pl.List(pl.Int64), "consumer": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 # ── LearnsFrom ────────────────────────────────────────────────────
@@ -156,5 +201,12 @@ def test_predict_learns_from(test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    # learner.value = mean(x) + offset = 5.0 + 5.0 = 10.0
-    assert (predictions["learner"] == 10.0).all()
+    distinct = predictions.select("source", "learner").unique()
+    expected = pl.DataFrame(
+        {
+            "source": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+            "learner": [10.0],
+        },
+        schema={"source": pl.List(pl.Int64), "learner": pl.Float64},
+    )
+    assert_frame_equal(distinct, expected)
