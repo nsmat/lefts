@@ -1,6 +1,7 @@
 import warnings
 import pytest
 import polars as pl
+from polars.testing import assert_frame_equal
 
 from pomap.interface import leaf, lift, split, feed
 from conftest import MockModel, ConsumerModel
@@ -16,9 +17,15 @@ def test_plain_feed_no_warnings(test_dataframe):
         model.fit(test_dataframe)
 
     predictions = model.predict(test_dataframe)
-    expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert predictions["src"].to_list() == [expected] * 9
-    assert predictions["cons"].to_list() == [expected] * 9
+    distinct = predictions.select("src", "cons").unique()
+    expected = pl.DataFrame(
+        {
+            "src": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+            "cons": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        },
+        schema={"src": pl.List(pl.Int64), "cons": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 def test_split_above_feed_no_leakage(test_dataframe):
@@ -40,13 +47,24 @@ def test_split_above_feed_no_leakage(test_dataframe):
     assert model.models["src"].seen == [1, 2, 3, 4]
 
     predictions = model.predict(test_dataframe)
-    expected = [1, 2, 3, 4]
-    on_test = predictions.filter(pl.col("x") >= 5)
-    assert on_test["src"].to_list() == [expected] * 5
-    assert on_test["cons"].to_list() == [expected] * 5
-    off_test = predictions.filter(pl.col("x") < 5)
-    assert off_test["src"].is_null().all()
-    assert off_test["cons"].is_null().all()
+    distinct = (
+        predictions.with_columns(in_test=pl.col("x") >= 5)
+        .select("in_test", "src", "cons")
+        .unique(subset=["in_test"], maintain_order=True)
+    )
+    expected = pl.DataFrame(
+        {
+            "in_test": [False, True],
+            "src": [None, [1, 2, 3, 4]],
+            "cons": [None, [1, 2, 3, 4]],
+        },
+        schema={
+            "in_test": pl.Boolean,
+            "src": pl.List(pl.Int64),
+            "cons": pl.List(pl.Int64),
+        },
+    )
+    assert_frame_equal(distinct, expected)
 
 
 def test_split_above_feed_warns_nan_augmentation(test_dataframe):
@@ -68,9 +86,12 @@ def test_split_above_feed_warns_nan_augmentation(test_dataframe):
 
     # Predict still runs cleanly — only fit-time augmentation is affected by the NaN gap.
     predictions = model.predict(test_dataframe)
-    expected = [1, 2, 3, 4]
-    on_test = predictions.filter(pl.col("x") >= 5)
-    assert on_test["cons"].to_list() == [expected] * 5
+    distinct = predictions.filter(pl.col("x") >= 5).select("cons").unique()
+    expected = pl.DataFrame(
+        {"cons": [[1, 2, 3, 4]]},
+        schema={"cons": pl.List(pl.Int64)},
+    )
+    assert_frame_equal(distinct, expected)
 
 
 def test_asymmetric_source_consumer_warns_leak(test_dataframe):
@@ -95,12 +116,25 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
         model.fit(test_dataframe)
 
     predictions = model.predict(test_dataframe)
-    expected_all = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert predictions["teacher"].to_list() == [expected_all] * 9
-    on_test = predictions.filter(pl.col("x") >= 5)
-    assert on_test["student"].to_list() == [expected_all] * 5
-    off_test = predictions.filter(pl.col("x") < 5)
-    assert off_test["student"].is_null().all()
+    distinct = (
+        predictions.with_columns(in_test=pl.col("x") >= 5)
+        .select("in_test", "teacher", "student")
+        .unique(subset=["in_test"], maintain_order=True)
+    )
+    full = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    expected = pl.DataFrame(
+        {
+            "in_test": [False, True],
+            "teacher": [full, full],
+            "student": [None, full],
+        },
+        schema={
+            "in_test": pl.Boolean,
+            "teacher": pl.List(pl.Int64),
+            "student": pl.List(pl.Int64),
+        },
+    )
+    assert_frame_equal(distinct, expected)
 
 
 def test_feed_with_lift_in_source_and_consumer(test_dataframe):
@@ -137,31 +171,47 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     assert model.models["teacher[teacher_signal=1]"].seen == [1, 2, 3, 7, 8, 9]
     assert model.models["teacher[teacher_signal=2]"].seen == [1, 2, 3, 4, 5, 6]
 
-    # student[cv_fold=0] trains on fold=1 and fold=2 rows. For each of those rows
-    # the teacher_signal value is the training list of whichever teacher was
-    # responsible for that fold; no row's own x appears in the list it saw (OOF).
+    # student[cv_fold=0] trains on fold=1 and fold=2 rows; teacher_signal per
+    # row is the training list of whichever teacher was responsible for that
+    # fold, and no row's own x appears in the list it saw (OOF).
     assert model.models["student[cv_fold=0]"].seen == (
-        [[1, 2, 3, 7, 8, 9]] * 3  # fold=1 rows (x=4,5,6) ← teacher[teacher_signal=1].seen
-        + [[1, 2, 3, 4, 5, 6]] * 3  # fold=2 rows (x=7,8,9) ← teacher[teacher_signal=2].seen
+        [[1, 2, 3, 7, 8, 9]] * 3  # fold=1 rows ← teacher[teacher_signal=1].seen
+        + [[1, 2, 3, 4, 5, 6]] * 3  # fold=2 rows ← teacher[teacher_signal=2].seen
     )
 
-    # Predict-side: currently broken — `_predict` is a flat loop and runs
-    # `_apply_aggregations` only at the end, so the consumer's `.predict` tries
-    # to read `pl.col("teacher_signal")` before that column has been produced.
-    # Tracked as "Predict-time aggregation ordering for Feed" in CLAUDE.md.
-    # This call is left in deliberately so the test fails until the fix lands.
+    # Predict-side currently fails — `_predict` is a flat loop and runs
+    # `_apply_aggregations` only at the end, so the consumer's `.predict` reads
+    # `pl.col("teacher_signal")` before that column has been produced. Tracked
+    # as "Predict-time aggregation ordering for Feed" in CLAUDE.md. Leaving the
+    # call in deliberately so the test fails until the fix lands.
     predictions = model.predict(test_dataframe)
-    # Once predict works, each row's teacher_signal should be the OOF list for
-    # that row's fold, and the student's prediction should be the same list
-    # (passthrough).
-    assert predictions["teacher_signal"].to_list() == [
-        [4, 5, 6, 7, 8, 9],  # fold=0 rows
-        [4, 5, 6, 7, 8, 9],
-        [4, 5, 6, 7, 8, 9],
-        [1, 2, 3, 7, 8, 9],  # fold=1 rows
-        [1, 2, 3, 7, 8, 9],
-        [1, 2, 3, 7, 8, 9],
-        [1, 2, 3, 4, 5, 6],  # fold=2 rows
-        [1, 2, 3, 4, 5, 6],
-        [1, 2, 3, 4, 5, 6],
-    ]
+    distinct = (
+        predictions.select(
+            "fold",
+            "teacher_signal",
+            "student[cv_fold=0]",
+            "student[cv_fold=1]",
+            "student[cv_fold=2]",
+        ).unique(subset=["fold"], maintain_order=True)
+    )
+    expected = pl.DataFrame(
+        {
+            "fold": [0, 1, 2],
+            "teacher_signal": [
+                [4, 5, 6, 7, 8, 9],
+                [1, 2, 3, 7, 8, 9],
+                [1, 2, 3, 4, 5, 6],
+            ],
+            "student[cv_fold=0]": [[4, 5, 6, 7, 8, 9], None, None],
+            "student[cv_fold=1]": [None, [1, 2, 3, 7, 8, 9], None],
+            "student[cv_fold=2]": [None, None, [1, 2, 3, 4, 5, 6]],
+        },
+        schema={
+            "fold": pl.Int64,
+            "teacher_signal": pl.List(pl.Int64),
+            "student[cv_fold=0]": pl.List(pl.Int64),
+            "student[cv_fold=1]": pl.List(pl.Int64),
+            "student[cv_fold=2]": pl.List(pl.Int64),
+        },
+    )
+    assert_frame_equal(distinct, expected)
