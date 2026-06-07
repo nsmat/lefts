@@ -59,9 +59,9 @@ def test_masks_split_with_validation(test_dataframe):
         _make_leaf("m"),
         train_filter=pl.col("x") < 5,
         test_filter=pl.col("x") >= 10,
-        validation_filter=pl.col("x").is_in([6.0, 8.0]),
+        validation_filter=pl.col("x").is_in([6, 8]),
     )
     marked = model.mark_train_validation_test_rows(test_dataframe)
     assert "m__validation" in marked.columns
     val = marked.filter(pl.col("m__validation"))
-    assert set(val["x"].to_list()) == {6.0, 8.0}
+    assert set(val["x"].to_list()) == {6, 8}

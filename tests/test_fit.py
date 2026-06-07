@@ -11,9 +11,9 @@ from conftest import MockModel, ConsumerModel
 
 def test_fit_lift_fans_out(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
-    assert models["model-x[category=a]"].value == 3
-    assert models["model-x[category=b]"].value == 15
-    assert models["model-x[category=c]"].value == 6
+    assert models["model-x[category=a]"].seen == [2, 3, 4]
+    assert models["model-x[category=b]"].seen == [10, 15, 20]
+    assert models["model-x[category=c]"].seen == [4, 6, 8]
 
 
 def test_fit_lift_nested_decorates_labels(model_x, test_dataframe):
@@ -46,22 +46,21 @@ def test_fit_split_applies_train_filter(model_x, test_dataframe):
         test_filter=pl.lit(True),
     )
     models, _ = _fit(node, test_dataframe)
-    # train: x in [2, 3, 4, 4, 6, 8], mean = 4.5
-    assert models["model-x"].value == 4.5
+    assert models["model-x"].seen == [2, 3, 4, 4, 6, 8]
 
 
 def test_fit_split_validation_passthrough(test_dataframe):
     @dataclass
     class ValModel:
-        train_mean: float = None
-        val_mean: float = None
+        train_seen: list = None
+        val_seen: list = None
 
         def fit(self, training_set, validation_set):
-            self.train_mean = training_set["x"].mean()
-            self.val_mean = validation_set["x"].mean()
+            self.train_seen = training_set["x"].to_list()
+            self.val_seen = validation_set["x"].to_list()
 
         def predict(self, df):
-            return [self.train_mean] * len(df)
+            return [self.train_seen] * len(df)
 
     leaf_node = Leaf(label="m", factory=lambda: ValModel())
     node = Split(
@@ -69,11 +68,11 @@ def test_fit_split_validation_passthrough(test_dataframe):
         child=leaf_node,
         train_filter=pl.col("x") < 5,
         test_filter=pl.col("x") >= 10,
-        validation_filter=pl.col("x").is_in([6.0, 8.0]),
+        validation_filter=pl.col("x").is_in([6, 8]),
     )
     models, _ = _fit(node, test_dataframe)
-    assert models["m"].train_mean == 3.25
-    assert models["m"].val_mean == 7.0
+    assert models["m"].train_seen == [2, 3, 4, 4]
+    assert models["m"].val_seen == [6, 8]
 
 
 # Composition-flavored fit tests — may migrate to test_commutativity.py later
@@ -93,8 +92,8 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
     )
     models, _ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
-    # train: category=a AND x>3 → only x=4.0
-    assert models["model-x[category=a]"].value == 4.0
+    # train: category=a AND x>3 → only x=4
+    assert models["model-x[category=a]"].seen == [4]
 
 
 def test_fit_lift_inside_split(model_x, test_dataframe):
@@ -113,8 +112,8 @@ def test_fit_lift_inside_split(model_x, test_dataframe):
     )
     models, _ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
-    # train: x>2 AND category=a → x in [3, 4], mean = 3.5
-    assert models["model-x[category=a]"].value == 3.5
+    # train: x>2 AND category=a → x in [3, 4]
+    assert models["model-x[category=a]"].seen == [3, 4]
 
 
 # ── Feed ──────────────────────────────────────────────────────────
@@ -127,29 +126,12 @@ def test_fit_feed_basic(test_dataframe):
     )
     node = Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
     models, _ = _fit(node, test_dataframe)
-    # source trains on all x: mean = 8.0
-    assert models["source"].value == 8.0
-    # consumer trains on the augmented df where the "source" column is 8.0 everywhere
-    assert models["consumer"].value == 8.0
 
-
-def test_fit_feed_augmentation_is_used(test_dataframe):
-    @dataclass
-    class SummingConsumer:
-        value: float = None
-
-        def fit(self, training_set):
-            self.value = training_set["x"].mean() + training_set["source"].mean()
-
-        def predict(self, df):
-            return [self.value] * len(df)
-
-    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
-    consumer_leaf = Leaf(label="consumer", factory=lambda: SummingConsumer())
-    node = Feed(name="test", source=source_leaf, consumer=consumer_leaf)
-    models, _ = _fit(node, test_dataframe)
-    # x mean = 8.0, source prediction mean = 8.0, so consumer.value = 16.0
-    assert models["consumer"].value == 16.0
+    expected_source_training = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    assert models["source"].seen == expected_source_training
+    # Consumer's training rows each received the source's training list as their
+    # "source" feature, so its `.seen` is N copies of that list.
+    assert models["consumer"].seen == [expected_source_training] * 9
 
 
 # ── LearnsFrom ────────────────────────────────────────────────────
@@ -167,6 +149,12 @@ class _OffsetModel:
         return [self.value] * len(df)
 
 
+def _mean_of_source_training_data(model, df):
+    preds = model.predict(df)
+    training_values = preds["source"][0]
+    return {"offset": sum(training_values) / len(training_values)}
+
+
 def test_fit_learns_from_threads_hyperparameters(test_dataframe):
     source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
     learner_leaf = Leaf(
@@ -174,17 +162,17 @@ def test_fit_learns_from_threads_hyperparameters(test_dataframe):
         factory=lambda offset=0.0: _OffsetModel(offset=offset),
     )
 
-    def learn_logic(model, df):
-        preds = model.predict(df)
-        return {"offset": preds["source"].mean()}
-
     node = LearnsFrom(
         name="test",
         learner=learner_leaf,
         learns_from=source_leaf,
-        learn_logic=learn_logic,
+        learn_logic=_mean_of_source_training_data,
     )
     models, hyperparameters = _fit(node, test_dataframe)
-    assert models["source"].value == 8.0
+
+    # source's training data is the full x column
+    assert models["source"].seen == [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    # learn_logic computes the mean of source's training data → 72/9 = 8.0
     assert hyperparameters["offset"] == 8.0
+    # learner.value = mean(x) + offset = 8.0 + 8.0 = 16.0
     assert models["learner"].value == 16.0

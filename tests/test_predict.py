@@ -13,11 +13,11 @@ def test_predict_lift_per_value_columns(lift_x, test_dataframe):
     models, _ = _fit(lift_x, test_dataframe)
     predictions = _predict(lift_x, models, test_dataframe)
 
-    expected = {"a": 3, "b": 15, "c": 6}
+    expected = {"a": [2, 3, 4], "b": [10, 15, 20], "c": [4, 6, 8]}
     for cat in ["a", "b", "c"]:
-        unique = predictions.filter(category=cat)[f"model-x[category={cat}]"].unique()
-        assert unique.shape[0] == 1
-        assert unique.item(0) == expected[cat]
+        rows = predictions.filter(category=cat)
+        col = f"model-x[category={cat}]"
+        assert rows[col].to_list() == [expected[cat]] * rows.height
 
 
 # ── Split ─────────────────────────────────────────────────────────
@@ -33,8 +33,10 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
+    expected_training = [2, 3, 4, 4, 6, 8]
     on_test = predictions.filter(pl.col("x") >= 10)
-    assert (on_test["model-x"] == 4.5).all()
+    assert on_test["model-x"].to_list() == [expected_training] * on_test.height
+
     off_test = predictions.filter(pl.col("x") < 10)
     assert off_test["model-x"].is_null().all()
 
@@ -45,21 +47,29 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
 def test_predict_ensemble_separate_columns(ensemble_x1_x2, test_dataframe):
     models, _ = _fit(ensemble_x1_x2, test_dataframe)
     predictions = _predict(ensemble_x1_x2, models, test_dataframe)
-    assert (predictions["model-x"] == 8.0).all()
-    assert (predictions["model-x2"] == -8.0).all()
+
+    expected_x = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    expected_x2 = [-2, -3, -4, -10, -15, -20, -4, -6, -8]
+    assert predictions["model-x"].to_list() == [expected_x] * 9
+    assert predictions["model-x2"].to_list() == [expected_x2] * 9
 
 
 def test_predict_ensemble_aggregate_collapses(model_x, model_x2, test_dataframe):
     ensemble = Ensemble(
-        name="avg",
+        name="combined",
         models=[model_x, model_x2],
-        aggregate_with=pl.mean_horizontal,
+        aggregate_with=pl.coalesce,
     )
     models, _ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
-    assert (predictions["avg"] == 0.0).all()
+
+    assert "combined" in predictions.columns
     assert "model-x" not in predictions.columns
     assert "model-x2" not in predictions.columns
+
+    # coalesce picks the first non-null per row → model-x's predictions → x training list
+    expected = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    assert predictions["combined"].to_list() == [expected] * 9
 
 
 def test_predict_ensemble_nested_aggregates(test_dataframe):
@@ -70,19 +80,24 @@ def test_predict_ensemble_nested_aggregates(test_dataframe):
     inner = Ensemble(
         name="inner",
         models=[inner_x, inner_x2],
-        aggregate_with=pl.mean_horizontal,
+        aggregate_with=pl.coalesce,
     )
     outer = Ensemble(
         name="outer",
         models=[inner, outer_x],
-        aggregate_with=pl.mean_horizontal,
+        aggregate_with=pl.coalesce,
     )
 
     models, _ = _fit(outer, test_dataframe)
     predictions = _predict(outer, models, test_dataframe)
-    assert (predictions["outer"] == 4.0).all()
+
     for intermediate in ("inner", "inner-x", "inner-x2", "outer-x"):
         assert intermediate not in predictions.columns
+    assert "outer" in predictions.columns
+
+    # inner's coalesce picks inner-x's predictions; outer's coalesce picks that.
+    expected = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    assert predictions["outer"].to_list() == [expected] * 9
 
 
 # ── Feed ──────────────────────────────────────────────────────────
@@ -96,8 +111,10 @@ def test_predict_feed_source_then_consumer(test_dataframe):
     node = Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
-    assert (predictions["source"] == 8.0).all()
-    assert (predictions["consumer"] == 8.0).all()
+
+    expected = [2, 3, 4, 10, 15, 20, 4, 6, 8]
+    assert predictions["source"].to_list() == [expected] * 9
+    assert predictions["consumer"].to_list() == [expected] * 9
 
 
 # ── LearnsFrom ────────────────────────────────────────────────────
@@ -115,6 +132,12 @@ class _OffsetModel:
         return [self.value] * len(df)
 
 
+def _mean_of_source_training_data(model, df):
+    preds = model.predict(df)
+    training_values = preds["source"][0]
+    return {"offset": sum(training_values) / len(training_values)}
+
+
 def test_predict_learns_from(test_dataframe):
     source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
     learner_leaf = Leaf(
@@ -122,17 +145,14 @@ def test_predict_learns_from(test_dataframe):
         factory=lambda offset=0.0: _OffsetModel(offset=offset),
     )
 
-    def learn_logic(model, df):
-        preds = model.predict(df)
-        return {"offset": preds["source"].mean()}
-
     node = LearnsFrom(
         name="test",
         learner=learner_leaf,
         learns_from=source_leaf,
-        learn_logic=learn_logic,
+        learn_logic=_mean_of_source_training_data,
     )
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
-    assert (predictions["source"] == 8.0).all()
+
+    # learner.value = mean(x) + offset = 8.0 + 8.0 = 16.0
     assert (predictions["learner"] == 16.0).all()

@@ -1,43 +1,9 @@
 import warnings
 import pytest
-from dataclasses import dataclass
 import polars as pl
 
 from pomap.interface import leaf, lift, split, feed
-
-
-@dataclass
-class MockModel:
-    x_column: str
-    value: float = None
-
-    def fit(self, training_set: pl.DataFrame):
-        self.value = training_set[self.x_column].mean()
-
-    def predict(self, df: pl.DataFrame):
-        return [self.value] * len(df)
-
-
-@dataclass
-class ConsumerModel:
-    """Acts as a passthrough for the teacher, so we can inspect
-    Whatever the teacher was feeding"""
-
-    source_col: str
-    value: float = None
-
-    def fit(self, training_set: pl.DataFrame):
-        self.value = training_set[self.source_col].mean()
-
-    def predict(self, df: pl.DataFrame):
-        return [self.value] * len(df)
-
-
-@pytest.fixture
-def test_dataframe():
-    df_a = pl.DataFrame({"x": [2.0, 3.0, 4.0]})
-    df_b = pl.DataFrame({"x": [10.0, 15.0, 20.0]})
-    return pl.concat([df_a, df_b])
+from conftest import MockModel, ConsumerModel
 
 
 def test_plain_feed_no_warnings(test_dataframe):
@@ -65,8 +31,8 @@ def test_split_above_feed_no_leakage(test_dataframe):
         warnings.simplefilter("ignore")  # NaN-augmentation warning is expected here
         model.fit(test_dataframe)
 
-    # Train rows are x<10: [2, 3, 4], mean = 3.0. Source must NOT have seen x>=10.
-    assert model.models["src"].value == 3.0
+    # Source's training data is exactly the Split's train rows; nothing leaked in.
+    assert model.models["src"].seen == [2, 3, 4, 4, 6, 8]
 
 
 def test_split_above_feed_warns_nan_augmentation(test_dataframe):
@@ -113,7 +79,7 @@ def test_asymmetric_source_consumer_warns_leak(test_dataframe):
 def test_feed_with_lift_in_source_and_consumer():
     df = pl.DataFrame(
         {
-            "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            "x": [1, 2, 3, 4, 5, 6, 7, 8],
             "fold": [0, 0, 1, 1, 2, 2, 3, 3],
         }
     )
@@ -121,13 +87,9 @@ def test_feed_with_lift_in_source_and_consumer():
     teacher = leaf(lambda: MockModel(x_column="x"), "teacher")
     student = leaf(lambda: ConsumerModel(source_col="teacher_signal"), "student")
 
-    # The following trains a 'leak free' teacher signal
-    # For fold 0, the teacher trains on folds 1, 2, 3
-    # And gives predictions on fold 0.
-
-    # Likewise For fold 1, the student trains on folds 0, 2, 3
-    # It's teacher signal on fold 1 rows will be predicted
-    # only from data that was available to fold 1 at test time
+    # CV cross-fitting via Lift inside source. Each teacher fold v trains on
+    # `fold != v` and predicts on `fold == v`; the coalesce produces a single
+    # column of OOF predictions covering all rows.
     source = lift(
         teacher,
         name="teacher_signal",
@@ -155,8 +117,15 @@ def test_feed_with_lift_in_source_and_consumer():
     }
     assert set(model.models.keys()) == expected_keys
 
-    # Each teacher trained on rows where fold != v — no leakage.
-    # fold=0 leaf trains on x in [3,4,5,6,7,8], mean = 5.5
-    assert model.models["teacher[teacher_signal=0]"].value == 5.5
-    # fold=3 leaf trains on x in [1,2,3,4,5,6], mean = 3.5
-    assert model.models["teacher[teacher_signal=3]"].value == 3.5
+    # Each teacher trained only on rows where fold != v.
+    assert model.models["teacher[teacher_signal=0]"].seen == [3, 4, 5, 6, 7, 8]
+    assert model.models["teacher[teacher_signal=3]"].seen == [1, 2, 3, 4, 5, 6]
+
+    # OOF check on the student side: for each of student[cv_fold=0]'s training
+    # rows, the teacher_signal it saw was produced by a teacher that excluded
+    # that row, so the row's own x value must NOT appear in the teacher_signal
+    # list it was trained on.
+    student_seen = model.models["student[cv_fold=0]"].seen
+    student_train_xs = df.filter(pl.col("fold") != 0)["x"].to_list()
+    for x_val, teacher_signal_list in zip(student_train_xs, student_seen):
+        assert x_val not in teacher_signal_list

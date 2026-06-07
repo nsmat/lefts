@@ -7,33 +7,42 @@ from pomap.nodes import Leaf, Lift, Ensemble
 
 @dataclass
 class MockModel:
+    """Captures the training values for `x_column` into `.seen`.
+
+    `predict` returns the captured list for every row of the input df, so the
+    resulting column is a polars List column whose values are the training data.
+    """
+
     x_column: str
-    value: float = None
+    seen: list = None
 
     def fit(self, training_set: pl.DataFrame):
-        self.value = training_set[self.x_column].mean()
+        self.seen = training_set[self.x_column].to_list()
 
     def predict(self, df: pl.DataFrame):
-        return [self.value] * df.shape[0]
+        return [self.seen] * df.shape[0]
 
 
 @dataclass
 class ConsumerModel:
+    """Captures the training values for `source_col` into `.seen`; predict passes
+    the source column through unchanged."""
+
     source_col: str
-    value: float = None
+    seen: list = None
 
     def fit(self, training_set: pl.DataFrame):
-        self.value = training_set[self.source_col].mean()
+        self.seen = training_set[self.source_col].to_list()
 
     def predict(self, df: pl.DataFrame):
-        return [self.value] * len(df)
+        return df[self.source_col].to_list()
 
 
 @pytest.fixture
 def test_dataframe():
-    df_a = pl.DataFrame({"x": [2.0, 3.0, 4.0], "category": ["a", "a", "a"]})
-    df_b = pl.DataFrame({"x": [10.0, 15.0, 20.0], "category": ["b", "b", "b"]})
-    df_c = pl.DataFrame({"x": [4.0, 6.0, 8.0], "category": ["c", "c", "c"]})
+    df_a = pl.DataFrame({"x": [2, 3, 4], "category": ["a", "a", "a"]})
+    df_b = pl.DataFrame({"x": [10, 15, 20], "category": ["b", "b", "b"]})
+    df_c = pl.DataFrame({"x": [4, 6, 8], "category": ["c", "c", "c"]})
     return pl.concat([df_a, df_b, df_c]).with_columns(x2=-pl.col("x"))
 
 
