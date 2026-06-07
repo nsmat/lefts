@@ -1,3 +1,5 @@
+import warnings
+
 from .nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
 from typing import Iterator, Tuple, Any, Optional
 from polars import DataFrame, Series, Expr, lit
@@ -72,16 +74,24 @@ def _collect_masks(
     train_mask: Expr | None = None,
     validation_mask: Expr | None = None,
     test_mask: Expr | None = None,
-):
+) -> dict[str, dict[str, Expr | None]]:
+    """
+    Returns a dictionary of label -> {train: train_mask, validation: validation_mask, test: test_mask}
+    """
     label_context = label_context or dict()
-
     train_mask = train_mask if train_mask is not None else lit(True)
     test_mask = test_mask if test_mask is not None else lit(True)
+
+    result = {}
 
     match node:
         case Leaf(label=leaf_label):
             full_label = _make_label(leaf_label, label_context)
-            yield full_label, train_mask, validation_mask, test_mask
+            result[full_label] = {
+                "train": train_mask,
+                "validation": validation_mask,
+                "test": test_mask,
+            }
 
         case Lift(
             child=child,
@@ -93,12 +103,8 @@ def _collect_masks(
         ):
             for value in values:
                 next_label_context = {**label_context, name: value}
-
-                lift_train_mask = train_filter(value)
-                next_train_mask = lift_train_mask & train_mask
-
-                lift_test_mask = test_filter(value)
-                next_test_mask = lift_test_mask & test_mask
+                next_train_mask = train_filter(value) & train_mask
+                next_test_mask = test_filter(value) & test_mask
 
                 if validation_filter is None:
                     next_validation_mask = validation_mask
@@ -107,12 +113,14 @@ def _collect_masks(
                     if validation_mask is not None:
                         next_validation_mask = next_validation_mask & validation_mask
 
-                yield from _collect_masks(
-                    child,
-                    next_label_context,
-                    next_train_mask,
-                    next_validation_mask,
-                    next_test_mask,
+                result.update(
+                    _collect_masks(
+                        child,
+                        next_label_context,
+                        next_train_mask,
+                        next_validation_mask,
+                        next_test_mask,
+                    )
                 )
 
         case Split(
@@ -131,19 +139,25 @@ def _collect_masks(
                 if validation_mask is not None:
                     next_validation_mask = next_validation_mask & validation_mask
 
-            yield from _collect_masks(
-                child,
-                label_context,
-                next_train_mask,
-                next_validation_mask,
-                next_test_mask,
+            result.update(
+                _collect_masks(
+                    child,
+                    label_context,
+                    next_train_mask,
+                    next_validation_mask,
+                    next_test_mask,
+                )
             )
 
         case PomapNode():
             for child in node.children:
-                yield from _collect_masks(
-                    child, label_context, train_mask, validation_mask, test_mask
+                result.update(
+                    _collect_masks(
+                        child, label_context, train_mask, validation_mask, test_mask
+                    )
                 )
+
+    return result
 
 
 def _fit(
@@ -164,7 +178,6 @@ def _fit(
 
     if is_root:
         precomputed_masks = _collect_masks(node)
-        precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in precomputed_masks}
 
     match node:
         case Leaf(label=label, factory=factory):
@@ -175,8 +188,8 @@ def _fit(
             model = factory(**hyperparameters)
             model_label = _make_label(label, label_context)
 
-            train_mask = precomputed_masks[model_label][0]
-            validation_mask = precomputed_masks[model_label][1]
+            train_mask = precomputed_masks[model_label]["train"]
+            validation_mask = precomputed_masks[model_label]["validation"]
 
             train_df = df.filter(train_mask)
 
@@ -278,10 +291,34 @@ def _fit(
             output_hyperparameters |= learner_hyperparameters | learned_hyperparameters
 
         case Feed(source=source, consumer=consumer):
-            source_models, source_hyperparameters = _fit(source, df)
-            source_model = _Model(source, source_models, source_hyperparameters)
-            augmented_df = source_model.predict(df)
+            _check_feed_row_compatibility(
+                source, consumer, df, precomputed_masks, label_context
+            )
+            source_models, source_hyperparameters = _fit(
+                source,
+                df,
+                hyperparameters,
+                label_context,
+                False,
+                precomputed_masks,
+            )
 
+            # Predict will loop through every label which keys the precomputed_masks
+            # So before running predict on the source we need to subset down to
+            # Just the columns we need
+            source_labels = _collect_masks(source, label_context).keys()
+            source_precomputed_masks = {
+                label: precomputed_masks[label] for label in source_labels
+            }
+
+            # We run predict with the source model, so the consumer has predictions available.
+            augmented_df = _predict(
+                source,
+                source_models,
+                df,
+                source_precomputed_masks,
+                label_context,
+            )
             consumer_models, consumer_hyperparameters = _fit(
                 consumer,
                 augmented_df,
@@ -343,7 +380,75 @@ def _apply_aggregations(
     return df
 
 
-def _predict(node: PomapNode, models: dict, df: DataFrame):
+def _check_feed_row_compatibility(
+    source_root: PomapNode,
+    consumer_root: PomapNode,
+    df: DataFrame,
+    precomputed_masks: dict,
+    label_context: dict,
+) -> None:
+    """
+    Emits warnings if there is suspicious behaviour in the train/test
+    overlap of the source and consumer of a Feed node.
+
+    Specifically it will warn if:
+    - The test set of the source is not a subset of the consumer. This may indicate a data leak.
+    - The test set of the source is a strict subset of the consumer, since this will cause NaNs in the fed column.
+    """
+
+    # It's possible to have multiple leaves with separate train/test
+    # Specification as one source (i.e. an ensemble with an aggregate)
+    # Hence, we take the union of all child masks.
+    def union_mask(node: PomapNode, mask_kind: str) -> Expr:
+        result = lit(False)
+        for label in _collect_masks(node, label_context):
+            result = result | precomputed_masks[label][mask_kind]
+        return result
+
+    source_train = union_mask(source_root, "train")
+    source_test = union_mask(source_root, "test")
+    consumer_train = union_mask(consumer_root, "train")
+
+    leak_rows = df.filter(source_train & ~consumer_train).height
+    if leak_rows > 0:
+        warnings.warn(
+            f"Feed: source's train set contains {leak_rows} rows not in consumer's "
+            "train set. This may signal a data leak - validate with Model.mark_train_validation_test_rows"
+            "if you are unsure",
+            UserWarning,
+            stacklevel=4,
+        )
+
+    nan_rows = df.filter(consumer_train & ~source_test).height
+    if nan_rows > 0:
+        warnings.warn(
+            f"Feed: {nan_rows} rows in consumer's train set are not in source's "
+            "test set. Source's augmentation column will be NaN on those rows "
+            "during consumer fit. If this is unexpected, validate your train and test filter"
+            "behaviour with Model.mark_train_validation_test_rows",
+            UserWarning,
+            stacklevel=4,
+        )
+
+
+def _predict(
+    node: PomapNode,
+    models: dict,
+    df: DataFrame,
+    precomputed_masks: dict | None = None,
+    label_context: dict | None = None,
+):
+    """Predict every leaf in `precomputed_masks` and apply aggregations.
+
+    `precomputed_masks` and `label_context` are passthroughs for callers that
+    already hold an outer context (e.g. `Feed`'s `_fit` augmentation, which
+    passes a scoped subset of the outer dict and the current label context so
+    decorated leaf labels and aggregated column names match the surrounding
+    tree). When omitted, both default to root-level values: masks are computed
+    from `node`'s subtree and the label context is empty.
+    """
+    label_context = label_context or {}
+
     if "__pomap_row_index" in df.columns:
         raise ValueError(
             "Trying to create column __pomap_row_index but it already exists"
@@ -351,11 +456,12 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
 
     df = df.with_row_index(name="__pomap_row_index")
 
-    precomputed_masks = {p[0]: (p[1], p[2], p[3]) for p in _collect_masks(node)}
+    if precomputed_masks is None:
+        precomputed_masks = _collect_masks(node)
 
     # We compute the full space of output columns first, then apply aggregation post-hoc
-    for label, (_train_mask, _validation_mask, test_mask) in precomputed_masks.items():
-        test_df = df.filter(test_mask)
+    for label, masks in precomputed_masks.items():
+        test_df = df.filter(masks["test"])
         predictions = models[label].predict(test_df)
         predictions = Series(name=label, values=predictions)
 
@@ -368,7 +474,7 @@ def _predict(node: PomapNode, models: dict, df: DataFrame):
             how="left",
         )
 
-    df = _apply_aggregations(node, df)
+    df = _apply_aggregations(node, df, label_context)
     df = df.drop("__pomap_row_index")
 
     return df
