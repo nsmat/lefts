@@ -31,7 +31,9 @@ def test_split_above_feed_no_leakage(test_dataframe):
     )
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # NaN-augmentation warning is expected here - we ignore it
+        warnings.simplefilter(
+            "ignore"
+        )  # NaN-augmentation warning is expected here - we ignore it
         model.fit(test_dataframe)
 
     # Source's training data is exactly the Split's train rows; nothing leaked in.
@@ -149,7 +151,6 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     assert model.models["teacher[cv_teacher=1]"].seen == data_excluding_fold_1
     assert model.models["teacher[cv_teacher=2]"].seen == data_excluding_fold_2
 
-
     # The student will see the predictions of the teacher - recall that the teacher
     # Just stores all the training data it saw. Hence, we expect that on each fold i
     # The student will be passed all the data from fold != i by the teacher.
@@ -164,15 +165,13 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     # as "Predict-time aggregation ordering for Feed" in CLAUDE.md. Leaving the
     # call in deliberately so the test fails until the fix lands.
     predictions = model.predict(test_dataframe)
-    distinct = (
-        predictions.select(
-            "fold",
-            "cv_teacher",
-            "student[cv_student=0]",
-            "student[cv_student=1]",
-            "student[cv_student=2]",
-        ).unique(subset=["fold"], maintain_order=True)
-    )
+    distinct = predictions.select(
+        "fold",
+        "cv_teacher",
+        "student[cv_student=0]",
+        "student[cv_student=1]",
+        "student[cv_student=2]",
+    ).unique(subset=["fold"], maintain_order=True)
     expected = pl.DataFrame(
         {
             "fold": [0, 1, 2],

@@ -37,11 +37,11 @@ def test_fit_split_validation_passthrough(test_dataframe):
         child=leaf_node,
         train_filter=pl.col("x") < 5,
         test_filter=pl.col("x") >= 8,
-        validation_filter=pl.col("x").is_between(5, 7, closed='both'),
+        validation_filter=pl.col("x").is_between(5, 7, closed="both"),
     )
     models, _ = _fit(node, test_dataframe)
     assert models["m"].seen == [1, 2, 3, 4]
-    assert models["m"].val_seen == [5,6, 7]
+    assert models["m"].val_seen == [5, 6, 7]
 
 
 # TODO: this tests composition, not fit behaviour itself - let's move to test_composition.py later
@@ -63,6 +63,7 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
     assert set(models.keys()) == {"model-x[category=a]"}
     # Train filters resolve to category==a (1, 2, 3) AND x>1, implies x in [2, 3]
     assert models["model-x[category=a]"].seen == [2, 3]
+
 
 # TODO this tests composition - not fit behaviour itself - let's move to test_composition.py later
 def test_fit_lift_inside_split(model_x, test_dataframe):

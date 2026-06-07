@@ -34,7 +34,7 @@ class ConsumerModel:
     """
     For use in Feed based setups - passes the exact values
     through from the teacher so we retain maximum visibility.
-    
+
     To keep the tests understandable, it only stores the distinct values
     seen on the source column.
     """
