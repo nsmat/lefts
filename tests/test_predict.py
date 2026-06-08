@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from pomap.nodes import Leaf, Split, Ensemble, LearnsFrom, Feed
+from pomap.nodes import Leaf, Split, Ensemble, Tune, Feed
 from pomap.interpreter.fit import _fit
 from pomap.interpreter.predict import _predict
 from conftest import MockModel, ConsumerModel
@@ -201,11 +201,11 @@ def test_predict_learns_from(test_dataframe):
         factory=lambda offset=0.0: _OffsetModel(offset=offset),
     )
 
-    node = LearnsFrom(
+    node = Tune(
         name="test",
-        learner=learner_leaf,
-        learns_from=source_leaf,
-        learn_logic=_mean_of_source_training_data,
+        consumer=learner_leaf,
+        source=source_leaf,
+        logic=_mean_of_source_training_data,
     )
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)

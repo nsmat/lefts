@@ -99,22 +99,22 @@ class Ensemble(PomapNode):
 
 
 @dataclass
-class LearnsFrom(PomapNode):
+class Tune(PomapNode):
     name: str
 
-    learner: PomapNode
-    learns_from: PomapNode
-    learn_logic: Callable[
+    consumer: PomapNode
+    source: PomapNode
+    logic: Callable[
         ["PomapNode", DataFrame], dict
     ]  # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
 
     @property
     def children(self) -> Iterable["PomapNode"]:
-        return [self.learns_from, self.learner]
+        return [self.source, self.consumer]
 
     @property
     def tree_repr(self) -> str:
-        return f"LearnsFrom: {self.name}"
+        return f"Tune: {self.name}"
 
 
 @dataclass

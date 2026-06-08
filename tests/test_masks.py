@@ -1,6 +1,6 @@
 import polars as pl
 
-from pomap.interface import leaf, lift, split, ensemble, feed, learn_from
+from pomap.interface import leaf, lift, split, ensemble, feed, tune
 
 
 def _make_leaf(label):
@@ -117,7 +117,7 @@ def test_masks_learns_from_passthrough(test_dataframe):
     # should both inherit the outer Split's mask.
     model = split(
         "tt",
-        learn_from(
+        tune(
             "lf",
             learner=_make_leaf("learner"),
             learns_from=_make_leaf("source"),

@@ -1,6 +1,6 @@
 import warnings
 
-from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
+from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, Tune, Feed
 from .labels import _make_label
 from .masks import _collect_masks
 from .predict import _Model, _predict
@@ -113,8 +113,8 @@ def _fit(
                 fitted_models |= child_fitted_models
                 output_hyperparameters |= child_learned_hyperparameters
 
-        case LearnsFrom(
-            learner=learner, learns_from=learns_from, learn_logic=learn_logic
+        case Tune(
+            consumer=learner, source=learns_from, logic=learn_logic
         ):
             source_models, learned_hyperparameters = _fit(
                 learns_from,

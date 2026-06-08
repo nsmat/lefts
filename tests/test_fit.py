@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
+from pomap.nodes import Lift, Leaf, Split, Ensemble, Tune, Feed
 from pomap.interpreter.fit import _fit
 from conftest import MockModel, ConsumerModel
 
@@ -128,11 +128,11 @@ def test_fit_learns_from_threads_hyperparameters(test_dataframe):
         factory=lambda offset=0.0: _OffsetModel(offset=offset),
     )
 
-    node = LearnsFrom(
+    node = Tune(
         name="test",
-        learner=learner_leaf,
-        learns_from=source_leaf,
-        learn_logic=_mean_of_source_training_data,
+        consumer=learner_leaf,
+        source=source_leaf,
+        logic=_mean_of_source_training_data,
     )
     models, hyperparameters = _fit(node, test_dataframe)
 

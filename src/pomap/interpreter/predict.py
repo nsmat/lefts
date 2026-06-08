@@ -3,7 +3,7 @@ from typing import Iterator, Optional
 
 from polars import DataFrame, Series
 
-from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
+from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, Tune, Feed
 from .labels import _make_label, _collect_labels
 from .masks import _collect_masks
 
@@ -116,7 +116,7 @@ def _predict(
                 consumer, models, df, precomputed_masks, label_context, is_root=False
             )
 
-        case LearnsFrom(learner=learner, learns_from=learns_from):
+        case Tune(consumer=learner, source=learns_from):
             df = _predict(
                 learns_from,
                 models,
