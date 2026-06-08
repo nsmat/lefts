@@ -9,7 +9,7 @@ def tabular_model(
     target: str,
 ) -> Callable[..., Any]:
     """
-    Wraps a sklearn-compatible estimator into a Pomap model factory.
+    Wraps a sklearn-compatible estimator into a Lefts model factory.
 
     The returned factory can be passed directly to `leaf(model_constructor=...)`.
 

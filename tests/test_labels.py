@@ -93,13 +93,13 @@ def test_labels_feed_yields_source_and_consumer():
 # ── Tune ────────────────────────────────────────────────────
 
 
-def test_labels_learns_from_yields_both_subtrees():
+def test_labels_tune_yields_both_subtrees():
     source_leaf = Leaf(label="source", factory=lambda: None)
-    learner_leaf = Leaf(label="learner", factory=lambda: None)
+    consumer_leaf = Leaf(label="consumer", factory=lambda: None)
     node = Tune(
         name="lf",
-        consumer=learner_leaf,
+        consumer=consumer_leaf,
         source=source_leaf,
         logic=lambda model, df: {},
     )
-    assert set(_collect_labels(node)) == {"source", "learner"}
+    assert set(_collect_labels(node)) == {"source", "consumer"}

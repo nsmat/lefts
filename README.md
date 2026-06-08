@@ -1,6 +1,6 @@
 # Lefts: composable machine-learning model transformations
 
-Lefts is a very simple domain specific language for building complex machine learning workflows from simple ones. Starting with your favourite machine learning models, you can use Pomap commands to:
+Lefts is a very simple domain specific language for building complex machine learning workflows from simple ones. Starting with your favourite machine learning models, you can use Lefts commands to:
 - Build complex ensembles.
 - Build complex cross validation and hyper-parametrisation procedures.
 - Allow a model to create features or targets for another model.
@@ -23,7 +23,7 @@ Lefts can operate on any model that is defined by:
 - a fit method, which maps from training data into the model parameters
 - a predict method, which maps from model parameters and test data into predictions.
 
-A Lefts command creates a new model by transforming these functions into a new .fit and .predict. Because this new model also has a .fit and .predict, it can be transformed with further Pomap commands.
+A Lefts command creates a new model by transforming these functions into a new .fit and .predict. Because this new model also has a .fit and .predict, it can be transformed with further Lefts commands.
 
 
 ### Conventions

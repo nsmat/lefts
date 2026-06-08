@@ -98,10 +98,10 @@ def ensemble(name: str, *models, aggregate_with=None):
 
 
 def tune(
-    name: str, learner: Model, learns_from: Model, logic: Callable[[Model, DataFrame], dict]
+    name: str, consumer: Model, source: Model, logic: Callable[[Model, DataFrame], dict]
 ):
     node = Tune(
-        name=name, consumer=learner.root, source=learns_from.root, logic=logic
+        name=name, consumer=consumer.root, source=source.root, logic=logic
     )
 
     return Model(node)
