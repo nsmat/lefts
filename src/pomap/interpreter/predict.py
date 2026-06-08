@@ -75,7 +75,9 @@ def _predict(
                 how="left",
             )
 
-        case Lift(child=child, name=name, values=values, aggregate_with=aggregation_function):
+        case Lift(
+            child=child, name=name, values=values, aggregate_with=aggregation_function
+        ):
             for value in values:
                 df = _predict(
                     child,
