@@ -52,11 +52,11 @@ def _predict(
     label_context = label_context or {}
 
     if is_root:
-        if "__pomap_row_index" in df.columns:
+        if "__lefts_row_index" in df.columns:
             raise ValueError(
-                "Trying to create column __pomap_row_index but it already exists"
+                "Trying to create column __lefts_row_index but it already exists"
             )
-        df = df.with_row_index(name="__pomap_row_index")
+        df = df.with_row_index(name="__lefts_row_index")
         if precomputed_masks is None:
             precomputed_masks = _collect_masks(node)
 
@@ -69,8 +69,8 @@ def _predict(
             predictions = Series(name=full_label, values=predictions)
             test_df = test_df.with_columns(predictions)
             df = df.join(
-                test_df.select("__pomap_row_index", full_label),
-                on="__pomap_row_index",
+                test_df.select("__lefts_row_index", full_label),
+                on="__lefts_row_index",
                 coalesce=True,
                 how="left",
             )
@@ -135,6 +135,6 @@ def _predict(
             )
 
     if is_root:
-        df = df.drop("__pomap_row_index")
+        df = df.drop("__lefts_row_index")
 
     return df

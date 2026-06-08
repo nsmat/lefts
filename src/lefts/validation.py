@@ -3,7 +3,7 @@ from typing import Iterator
 from .nodes import PomapNode, Leaf, Lift, Feed
 
 
-_RESERVED_COLUMN_NAMES = {"__pomap_row_index"}
+_RESERVED_COLUMN_NAMES = {"__lefts_row_index"}
 
 
 def _validate(root: PomapNode) -> None:
