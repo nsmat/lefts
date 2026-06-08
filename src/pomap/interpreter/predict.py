@@ -48,19 +48,7 @@ def _predict(
     label_context: dict | None = None,
     is_root: bool = True,
 ) -> DataFrame:
-    """Walk the tree, predicting each leaf and applying each Lift/Ensemble
-    aggregation at the moment its children's columns are ready.
 
-    Recursing rather than running a flat leaf-loop is what lets a downstream
-    node (e.g. a Feed's consumer) read the aggregated output of an upstream
-    Lift — by the time we descend into the consumer, the source's Lift has
-    already aggregated.
-
-    `precomputed_masks` and `label_context` are passthroughs from callers that
-    already hold an outer context (e.g. `Feed`'s `_fit` augmentation passes the
-    outer dict + the current label context). When omitted at the root, masks
-    are computed from `node`'s subtree and the label context is empty.
-    """
     label_context = label_context or {}
 
     if is_root:
