@@ -32,7 +32,7 @@ def _fit(
         case Leaf(label=label, factory=factory):
             # Note: it is safe to use the passed hyperparameters
             # Without further filtering on label, because the hyperparameters
-            # Are passed from a LearnsFrom to every node beneath them in the tree.
+            # Are passed from a Tune to every node beneath them in the tree.
             model = factory(**hyperparameters)
             model_label = _make_label(label, label_context)
 
@@ -114,20 +114,20 @@ def _fit(
                 output_hyperparameters |= child_learned_hyperparameters
 
         case Tune(
-            consumer=learner, source=learns_from, logic=learn_logic
+            consumer=consumer, source=source, logic=learn_logic
         ):
             source_models, learned_hyperparameters = _fit(
-                learns_from,
+                source,
                 df,
             )
 
             learn_from_model = _Model(
-                learns_from, source_models, learned_hyperparameters
+                source, source_models, learned_hyperparameters
             )
             learned_hyperparameters |= learn_logic(learn_from_model, df)
 
             learner_models, learner_hyperparameters = _fit(
-                learner,
+                consumer,
                 df,
                 learned_hyperparameters,
                 label_context,

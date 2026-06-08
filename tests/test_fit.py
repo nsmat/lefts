@@ -102,7 +102,7 @@ def test_fit_feed_basic(test_dataframe):
     assert models["consumer"].seen == [expected_source_training]
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
 @dataclass

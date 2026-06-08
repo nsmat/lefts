@@ -109,11 +109,11 @@ def test_masks_feed_passthrough(test_dataframe):
         assert (test["x"] >= 5).all()
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
 def test_masks_learns_from_passthrough(test_dataframe):
-    # LearnsFrom has no row filter of its own; learns_from and learner subtrees
+    # Tune has no row filter of its own; learns_from and learner subtrees
     # should both inherit the outer Split's mask.
     model = split(
         "tt",

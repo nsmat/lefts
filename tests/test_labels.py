@@ -90,7 +90,7 @@ def test_labels_feed_yields_source_and_consumer():
     assert set(_collect_labels(node)) == {"source", "consumer"}
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
 def test_labels_learns_from_yields_both_subtrees():

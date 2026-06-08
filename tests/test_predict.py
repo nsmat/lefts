@@ -175,7 +175,7 @@ def test_predict_feed_source_then_consumer(test_dataframe):
     assert_frame_equal(distinct, expected)
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
 @dataclass
