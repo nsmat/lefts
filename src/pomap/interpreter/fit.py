@@ -33,7 +33,6 @@ def _fit(
             # Note: it is safe to use the passed hyperparameters
             # Without further filtering on label, because the hyperparameters
             # Are passed from a LearnsFrom to every node beneath them in the tree.
-
             model = factory(**hyperparameters)
             model_label = _make_label(label, label_context)
 
@@ -152,20 +151,11 @@ def _fit(
                 precomputed_masks,
             )
 
-            # Predict will loop through every label which keys the precomputed_masks
-            # So before running predict on the source we need to subset down to
-            # Just the columns we need
-            source_labels = _collect_masks(source, label_context).keys()
-            source_precomputed_masks = {
-                label: precomputed_masks[label] for label in source_labels
-            }
-
-            # We run predict with the source model, so the consumer has predictions available.
             augmented_df = _predict(
                 source,
                 source_models,
                 df,
-                source_precomputed_masks,
+                precomputed_masks,
                 label_context,
             )
             consumer_models, consumer_hyperparameters = _fit(
