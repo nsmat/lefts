@@ -119,9 +119,7 @@ def _fit(
                 df,
             )
 
-            tune_model = _Model(
-                source, source_models, learned_hyperparameters
-            )
+            tune_model = _Model(source, source_models, learned_hyperparameters)
             learned_hyperparameters |= logic(tune_model, df)
 
             consumer_models, consumer_hyperparameters = _fit(

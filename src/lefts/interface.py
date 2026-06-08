@@ -100,9 +100,7 @@ def ensemble(name: str, *models, aggregate_with=None):
 def tune(
     name: str, consumer: Model, source: Model, logic: Callable[[Model, DataFrame], dict]
 ):
-    node = Tune(
-        name=name, consumer=consumer.root, source=source.root, logic=logic
-    )
+    node = Tune(name=name, consumer=consumer.root, source=source.root, logic=logic)
 
     return Model(node)
 
