@@ -3,12 +3,19 @@ from typing import Any, Callable, Iterable
 
 from polars import DataFrame
 
-from .interpreter import _fit, _Model, _print_tree, _collect_labels
-from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift
+from .interpreter.fit import _fit
+from .interpreter.predict import _Model
+from .interpreter.masks import _collect_masks
+from .interpreter.labels import _print_tree, _collect_labels
+from .nodes import Ensemble, Feed, Leaf, Tune, Lift, Split
+from .validation import _validate
 
 
 @dataclass
 class Model(_Model):
+    def __post_init__(self):
+        _validate(self.root)
+
     def fit(self, df: DataFrame):
         models, hyperparameters = _fit(self.root, df)
         self.models = models
@@ -22,6 +29,20 @@ class Model(_Model):
 
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
+
+    def mark_train_validation_test_rows(self, df: DataFrame) -> DataFrame:
+        """
+        Annotate `df` with boolean columns describing whether each
+        row belongs to the train, test and (if applicable) validation
+        sets for each sub model.
+        """
+        new_cols = []
+        for label, masks in _collect_masks(self.root).items():
+            new_cols.append(masks["train"].alias(f"{label}__train"))
+            new_cols.append(masks["test"].alias(f"{label}__test"))
+            if masks["validation"] is not None:
+                new_cols.append(masks["validation"].alias(f"{label}__validation"))
+        return df.with_columns(new_cols)
 
 
 def leaf(model_constructor: Callable[..., Any], label: str) -> Model:
@@ -51,6 +72,24 @@ def lift(
     return Model(lifted)
 
 
+def split(
+    name: str,
+    model: Model,
+    train_filter,
+    test_filter,
+    validation_filter=None,
+) -> Model:
+    node = Split(
+        name=name,
+        child=model.root,
+        train_filter=train_filter,
+        test_filter=test_filter,
+        validation_filter=validation_filter,
+    )
+
+    return Model(node)
+
+
 def ensemble(name: str, *models, aggregate_with=None):
     roots = [model.root for model in models]
     node = Ensemble(name, roots, aggregate_with=aggregate_with)
@@ -58,12 +97,10 @@ def ensemble(name: str, *models, aggregate_with=None):
     return Model(node)
 
 
-def learn_from(
-    name, learner: Model, learns_from: Model, logic: Callable[[Model, DataFrame], dict]
+def tune(
+    name: str, consumer: Model, source: Model, logic: Callable[[Model, DataFrame], dict]
 ):
-    node = LearnsFrom(
-        name=name, learner=learner.root, learns_from=learns_from.root, learn_logic=logic
-    )
+    node = Tune(name=name, consumer=consumer.root, source=source.root, logic=logic)
 
     return Model(node)
 
