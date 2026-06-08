@@ -75,7 +75,7 @@ def _predict(
                 how="left",
             )
 
-        case Lift(child=child, name=name, values=values, aggregate_with=fn):
+        case Lift(child=child, name=name, values=values, aggregate_with=aggregation_function):
             for value in values:
                 df = _predict(
                     child,
@@ -85,7 +85,7 @@ def _predict(
                     label_context | {name: value},
                     is_root=False,
                 )
-            if fn is not None:
+            if aggregation_function is not None:
                 df = _aggregate(node, df, label_context)
 
         case Split(child=child):
@@ -93,7 +93,7 @@ def _predict(
                 child, models, df, precomputed_masks, label_context, is_root=False
             )
 
-        case Ensemble(aggregate_with=fn):
+        case Ensemble(aggregate_with=aggregation_function):
             for child in node.children:
                 df = _predict(
                     child,
@@ -103,7 +103,7 @@ def _predict(
                     label_context,
                     is_root=False,
                 )
-            if fn is not None:
+            if aggregation_function is not None:
                 df = _aggregate(node, df, label_context)
 
         case Feed(source=source, consumer=consumer):
