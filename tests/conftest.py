@@ -2,7 +2,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Leaf, Lift
+from lefts.nodes import Leaf, Lift
 
 
 @dataclass

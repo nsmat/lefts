@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, Tune, Feed
-from pomap.interpreter.fit import _fit
+from lefts.nodes import Lift, Leaf, Split, Ensemble, Tune, Feed
+from lefts.interpreter.fit import _fit
 from conftest import MockModel, ConsumerModel
 
 

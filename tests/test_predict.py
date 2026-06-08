@@ -2,9 +2,9 @@ from dataclasses import dataclass
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from pomap.nodes import Leaf, Split, Ensemble, Tune, Feed
-from pomap.interpreter.fit import _fit
-from pomap.interpreter.predict import _predict
+from lefts.nodes import Leaf, Split, Ensemble, Tune, Feed
+from lefts.interpreter.fit import _fit
+from lefts.interpreter.predict import _predict
 from conftest import MockModel, ConsumerModel
 
 

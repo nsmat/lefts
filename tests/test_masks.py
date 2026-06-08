@@ -1,6 +1,6 @@
 import polars as pl
 
-from pomap.interface import leaf, lift, split, ensemble, feed, tune
+from lefts.interface import leaf, lift, split, ensemble, feed, tune
 
 
 def _make_leaf(label):
