@@ -3,14 +3,14 @@ from typing import Iterator, Optional
 
 from polars import DataFrame, Series
 
-from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
+from ..nodes import LeftsNode, Leaf, Lift, Split, Ensemble, Tune, Feed
 from .labels import _make_label, _collect_labels
 from .masks import _collect_masks
 
 
 @dataclass
 class _Model:
-    root: PomapNode
+    root: LeftsNode
     models: Optional[dict] = None
     hyperparameters: Optional[dict] = None
 
@@ -22,7 +22,7 @@ class _Model:
 
 
 def _get_aggregation_input_columns(
-    node: PomapNode, label_context: dict
+    node: LeftsNode, label_context: dict
 ) -> Iterator[str]:
     match node:
         case Lift(child=child, name=name, values=values):
@@ -33,7 +33,7 @@ def _get_aggregation_input_columns(
                 yield from _collect_labels(child, label_context)
 
 
-def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame:
+def _aggregate(node: LeftsNode, df: DataFrame, label_context: dict) -> DataFrame:
     input_cols = list(_get_aggregation_input_columns(node, label_context))
     full_col = _make_label(node.name, label_context)
     df = df.with_columns(node.aggregate_with(*input_cols).alias(full_col))
@@ -41,7 +41,7 @@ def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame
 
 
 def _predict(
-    node: PomapNode,
+    node: LeftsNode,
     models: dict,
     df: DataFrame,
     precomputed_masks: dict | None = None,
@@ -52,11 +52,11 @@ def _predict(
     label_context = label_context or {}
 
     if is_root:
-        if "__pomap_row_index" in df.columns:
+        if "__lefts_row_index" in df.columns:
             raise ValueError(
-                "Trying to create column __pomap_row_index but it already exists"
+                "Trying to create column __lefts_row_index but it already exists"
             )
-        df = df.with_row_index(name="__pomap_row_index")
+        df = df.with_row_index(name="__lefts_row_index")
         if precomputed_masks is None:
             precomputed_masks = _collect_masks(node)
 
@@ -69,8 +69,8 @@ def _predict(
             predictions = Series(name=full_label, values=predictions)
             test_df = test_df.with_columns(predictions)
             df = df.join(
-                test_df.select("__pomap_row_index", full_label),
-                on="__pomap_row_index",
+                test_df.select("__lefts_row_index", full_label),
+                on="__lefts_row_index",
                 coalesce=True,
                 how="left",
             )
@@ -116,9 +116,9 @@ def _predict(
                 consumer, models, df, precomputed_masks, label_context, is_root=False
             )
 
-        case LearnsFrom(learner=learner, learns_from=learns_from):
+        case Tune(consumer=consumer, source=source):
             df = _predict(
-                learns_from,
+                source,
                 models,
                 df,
                 precomputed_masks,
@@ -126,7 +126,7 @@ def _predict(
                 is_root=False,
             )
             df = _predict(
-                learner,
+                consumer,
                 models,
                 df,
                 precomputed_masks,
@@ -135,6 +135,6 @@ def _predict(
             )
 
     if is_root:
-        df = df.drop("__pomap_row_index")
+        df = df.drop("__lefts_row_index")
 
     return df

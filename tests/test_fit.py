@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, LearnsFrom, Feed
-from pomap.interpreter.fit import _fit
+from lefts.nodes import Lift, Leaf, Split, Ensemble, Tune, Feed
+from lefts.interpreter.fit import _fit
 from conftest import MockModel, ConsumerModel
 
 
@@ -102,7 +102,7 @@ def test_fit_feed_basic(test_dataframe):
     assert models["consumer"].seen == [expected_source_training]
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
 @dataclass
@@ -121,27 +121,27 @@ def _mean_of_source_training_data(model, df):
     return {"offset": model.predict(df)["source"].list.mean().first()}
 
 
-def test_fit_learns_from_threads_hyperparameters(test_dataframe):
+def test_fit_tune_threads_hyperparameters(test_dataframe):
     source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
-    learner_leaf = Leaf(
-        label="learner",
+    consumer_leaf = Leaf(
+        label="consumer",
         factory=lambda offset=0.0: _OffsetModel(offset=offset),
     )
 
-    node = LearnsFrom(
+    node = Tune(
         name="test",
-        learner=learner_leaf,
-        learns_from=source_leaf,
-        learn_logic=_mean_of_source_training_data,
+        consumer=consumer_leaf,
+        source=source_leaf,
+        logic=_mean_of_source_training_data,
     )
     models, hyperparameters = _fit(node, test_dataframe)
 
     # source's training data is the full x column
     assert models["source"].seen == [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    # learn_logic computes the mean of source's training data → 45/9 = 5.0
+    # logic computes the mean of source's training data → 45/9 = 5.0
     assert hyperparameters["offset"] == 5.0
-    # learner.value = mean(x) + offset = 5.0 + 5.0 = 10.0
-    assert models["learner"].value == 10.0
+    # consumer.value = mean(x) + offset = 5.0 + 5.0 = 10.0
+    assert models["consumer"].value == 10.0
 
 
 # ── Ensemble ──────────────────────────────────────────────────────────

@@ -1,11 +1,11 @@
 from polars import Expr, lit
 
-from ..nodes import PomapNode, Leaf, Lift, Split
+from ..nodes import LeftsNode, Leaf, Lift, Split
 from .labels import _make_label
 
 
 def _collect_masks(
-    node: PomapNode,
+    node: LeftsNode,
     label_context: dict | None = None,
     train_mask: Expr | None = None,
     validation_mask: Expr | None = None,
@@ -85,7 +85,7 @@ def _collect_masks(
                 )
             )
 
-        case PomapNode():
+        case LeftsNode():
             for child in node.children:
                 result.update(
                     _collect_masks(

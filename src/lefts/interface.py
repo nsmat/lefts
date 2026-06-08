@@ -7,7 +7,7 @@ from .interpreter.fit import _fit
 from .interpreter.predict import _Model
 from .interpreter.masks import _collect_masks
 from .interpreter.labels import _print_tree, _collect_labels
-from .nodes import Ensemble, Feed, Leaf, LearnsFrom, Lift, Split
+from .nodes import Ensemble, Feed, Leaf, Tune, Lift, Split
 from .validation import _validate
 
 
@@ -97,12 +97,10 @@ def ensemble(name: str, *models, aggregate_with=None):
     return Model(node)
 
 
-def learn_from(
-    name, learner: Model, learns_from: Model, logic: Callable[[Model, DataFrame], dict]
+def tune(
+    name: str, consumer: Model, source: Model, logic: Callable[[Model, DataFrame], dict]
 ):
-    node = LearnsFrom(
-        name=name, learner=learner.root, learns_from=learns_from.root, learn_logic=logic
-    )
+    node = Tune(name=name, consumer=consumer.root, source=source.root, logic=logic)
 
     return Model(node)
 

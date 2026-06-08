@@ -3,7 +3,7 @@ import pytest
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from pomap.interface import leaf, lift, split, feed
+from lefts.interface import leaf, lift, split, feed
 from conftest import MockModel, ConsumerModel
 
 

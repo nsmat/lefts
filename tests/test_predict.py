@@ -2,9 +2,9 @@ from dataclasses import dataclass
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from pomap.nodes import Leaf, Split, Ensemble, LearnsFrom, Feed
-from pomap.interpreter.fit import _fit
-from pomap.interpreter.predict import _predict
+from lefts.nodes import Leaf, Split, Ensemble, Tune, Feed
+from lefts.interpreter.fit import _fit
+from lefts.interpreter.predict import _predict
 from conftest import MockModel, ConsumerModel
 
 
@@ -175,7 +175,7 @@ def test_predict_feed_source_then_consumer(test_dataframe):
     assert_frame_equal(distinct, expected)
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
 @dataclass
@@ -194,32 +194,32 @@ def _mean_of_source_training_data(model, df):
     return {"offset": model.predict(df)["source"].list.mean().first()}
 
 
-def test_predict_learns_from(test_dataframe):
+def test_predict_tune(test_dataframe):
     source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
-    learner_leaf = Leaf(
-        label="learner",
+    consumer_leaf = Leaf(
+        label="consumer",
         factory=lambda offset=0.0: _OffsetModel(offset=offset),
     )
 
-    node = LearnsFrom(
+    node = Tune(
         name="test",
-        learner=learner_leaf,
-        learns_from=source_leaf,
-        learn_logic=_mean_of_source_training_data,
+        consumer=consumer_leaf,
+        source=source_leaf,
+        logic=_mean_of_source_training_data,
     )
     models, _ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
-    distinct = predictions.select("source", "learner").unique()
+    distinct = predictions.select("source", "consumer").unique()
 
     # Expectation is that source sees the training data.
-    # The learner should see the mean of the training data + the mean of the training data
+    # The consumer should see the mean of the training data + the mean of the training data
     # = 5 + 5 = 10
     expected = pl.DataFrame(
         {
             "source": [[1, 2, 3, 4, 5, 6, 7, 8, 9]],
-            "learner": [10.0],
+            "consumer": [10.0],
         },
-        schema={"source": pl.List(pl.Int64), "learner": pl.Float64},
+        schema={"source": pl.List(pl.Int64), "consumer": pl.Float64},
     )
     assert_frame_equal(distinct, expected)

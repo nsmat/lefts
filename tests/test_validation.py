@@ -2,8 +2,8 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, Feed
-from pomap.validation import _validate
+from lefts.nodes import Lift, Leaf, Split, Ensemble, Feed
+from lefts.validation import _validate
 
 
 @dataclass

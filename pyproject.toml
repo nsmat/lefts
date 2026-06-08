@@ -1,5 +1,5 @@
 [project]
-name = "pomap"
+name = "lefts"
 license = "Apache-2.0"
 version = "0.1.0"
 description = "Composable transformations for model experimentation"
@@ -22,7 +22,6 @@ dev  = [
     "jupyter",
     "jupyterlab",
     "nbstripout",
-    "ucimlrepo>=0.0.7",
 ]
 
 [build-system]

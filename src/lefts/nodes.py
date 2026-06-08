@@ -12,12 +12,12 @@ class ModelProtocol(Protocol):
     def predict(self, df): ...
 
 
-class PomapNode(ABC):
+class LeftsNode(ABC):
     name: str
 
     @property
     @abstractmethod
-    def children(self) -> Iterable["PomapNode"]:
+    def children(self) -> Iterable["LeftsNode"]:
         """Return iterable of child nodes."""
         ...
 
@@ -27,7 +27,7 @@ class PomapNode(ABC):
 
 
 @dataclass
-class Leaf(PomapNode):
+class Leaf(LeftsNode):
     label: str
     factory: Callable[[], ModelProtocol]
 
@@ -45,9 +45,9 @@ class Leaf(PomapNode):
 
 
 @dataclass
-class Lift(PomapNode):
+class Lift(LeftsNode):
     name: str
-    child: PomapNode
+    child: LeftsNode
     values: Iterable[DataType]
     train_filter: Callable[[DataType], Expr]
     test_filter: Callable[[DataType], Expr]
@@ -58,7 +58,7 @@ class Lift(PomapNode):
         self.values = set(self.values)
 
     @property
-    def children(self) -> Iterable["PomapNode"]:
+    def children(self) -> Iterable["LeftsNode"]:
         return [self.child]
 
     @property
@@ -67,15 +67,15 @@ class Lift(PomapNode):
 
 
 @dataclass
-class Split(PomapNode):
+class Split(LeftsNode):
     name: str
-    child: PomapNode
+    child: LeftsNode
     train_filter: Expr
     test_filter: Expr
     validation_filter: Expr | None = None
 
     @property
-    def children(self) -> Iterable["PomapNode"]:
+    def children(self) -> Iterable["LeftsNode"]:
         return [self.child]
 
     @property
@@ -84,9 +84,9 @@ class Split(PomapNode):
 
 
 @dataclass
-class Ensemble(PomapNode):
+class Ensemble(LeftsNode):
     name: str
-    models: Iterable[PomapNode]
+    models: Iterable[LeftsNode]
     aggregate_with: Callable[..., Expr] | None = None
 
     @property
@@ -99,32 +99,32 @@ class Ensemble(PomapNode):
 
 
 @dataclass
-class LearnsFrom(PomapNode):
+class Tune(LeftsNode):
     name: str
 
-    learner: PomapNode
-    learns_from: PomapNode
-    learn_logic: Callable[
-        ["PomapNode", DataFrame], dict
-    ]  # TODO this should actually typehint Model instead of PomapNode, but need to re-organise dirs first
+    consumer: LeftsNode
+    source: LeftsNode
+    logic: Callable[
+        ["LeftsNode", DataFrame], dict
+    ]  # TODO this should actually typehint Model instead of LeftsNode, but need to re-organise dirs first
 
     @property
-    def children(self) -> Iterable["PomapNode"]:
-        return [self.learns_from, self.learner]
+    def children(self) -> Iterable["LeftsNode"]:
+        return [self.source, self.consumer]
 
     @property
     def tree_repr(self) -> str:
-        return f"LearnsFrom: {self.name}"
+        return f"Tune: {self.name}"
 
 
 @dataclass
-class Feed(PomapNode):
+class Feed(LeftsNode):
     name: str
-    source: PomapNode
-    consumer: PomapNode
+    source: LeftsNode
+    consumer: LeftsNode
 
     @property
-    def children(self) -> Iterable["PomapNode"]:
+    def children(self) -> Iterable["LeftsNode"]:
         return [self.source, self.consumer]
 
     @property

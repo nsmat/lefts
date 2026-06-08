@@ -1,6 +1,6 @@
 import polars as pl
 
-from pomap.interface import leaf, lift, split, ensemble, feed, learn_from
+from lefts.interface import leaf, lift, split, ensemble, feed, tune
 
 
 def _make_leaf(label):
@@ -109,25 +109,25 @@ def test_masks_feed_passthrough(test_dataframe):
         assert (test["x"] >= 5).all()
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
-def test_masks_learns_from_passthrough(test_dataframe):
-    # LearnsFrom has no row filter of its own; learns_from and learner subtrees
+def test_masks_tune_passthrough(test_dataframe):
+    # Tune has no row filter of its own; source and consumer subtrees
     # should both inherit the outer Split's mask.
     model = split(
         "tt",
-        learn_from(
+        tune(
             "lf",
-            learner=_make_leaf("learner"),
-            learns_from=_make_leaf("source"),
+            consumer=_make_leaf("consumer"),
+            source=_make_leaf("source"),
             logic=lambda m, df: {},
         ),
         train_filter=pl.col("x") < 5,
         test_filter=pl.col("x") >= 5,
     )
     marked = model.mark_train_validation_test_rows(test_dataframe)
-    for label in ("source", "learner"):
+    for label in ("source", "consumer"):
         train = marked.filter(pl.col(f"{label}__train"))
         test = marked.filter(pl.col(f"{label}__test"))
         assert (train["x"] < 5).all()

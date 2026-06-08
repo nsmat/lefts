@@ -1,7 +1,7 @@
 import polars as pl
 
-from pomap.nodes import Lift, Leaf, Split, Ensemble, Feed, LearnsFrom
-from pomap.interpreter.labels import _collect_labels
+from lefts.nodes import Lift, Leaf, Split, Ensemble, Feed, Tune
+from lefts.interpreter.labels import _collect_labels
 
 
 # ── Lift ──────────────────────────────────────────────────────────
@@ -90,16 +90,16 @@ def test_labels_feed_yields_source_and_consumer():
     assert set(_collect_labels(node)) == {"source", "consumer"}
 
 
-# ── LearnsFrom ────────────────────────────────────────────────────
+# ── Tune ────────────────────────────────────────────────────
 
 
-def test_labels_learns_from_yields_both_subtrees():
+def test_labels_tune_yields_both_subtrees():
     source_leaf = Leaf(label="source", factory=lambda: None)
-    learner_leaf = Leaf(label="learner", factory=lambda: None)
-    node = LearnsFrom(
+    consumer_leaf = Leaf(label="consumer", factory=lambda: None)
+    node = Tune(
         name="lf",
-        learner=learner_leaf,
-        learns_from=source_leaf,
-        learn_logic=lambda model, df: {},
+        consumer=consumer_leaf,
+        source=source_leaf,
+        logic=lambda model, df: {},
     )
-    assert set(_collect_labels(node)) == {"source", "learner"}
+    assert set(_collect_labels(node)) == {"source", "consumer"}

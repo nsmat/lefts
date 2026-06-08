@@ -1,6 +1,6 @@
 from typing import Iterator
 
-from ..nodes import PomapNode, Leaf, Lift, Ensemble
+from ..nodes import LeftsNode, Leaf, Lift, Ensemble
 
 
 def _make_label(leaf_name: str, label_context: dict) -> str:
@@ -10,7 +10,7 @@ def _make_label(leaf_name: str, label_context: dict) -> str:
     return f"{leaf_name}[{dims}]"
 
 
-def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
+def _print_tree(node: LeftsNode, prefix="", is_root=True) -> str:
     # Leaf formatting
     if not hasattr(node, "children") or not node.children:
         label = getattr(node, "label", str(node))
@@ -32,7 +32,7 @@ def _print_tree(node: PomapNode, prefix="", is_root=True) -> str:
 
 
 def _collect_labels(
-    node: PomapNode, label_context: dict | None = None
+    node: LeftsNode, label_context: dict | None = None
 ) -> Iterator[str]:
     label_context = label_context or {}
 
@@ -46,6 +46,6 @@ def _collect_labels(
         case Lift(child=child, name=name, values=values):
             for value in values:
                 yield from _collect_labels(child, label_context | {name: value})
-        case PomapNode():
+        case LeftsNode():
             for child in node.children:
                 yield from _collect_labels(child, label_context)

@@ -1,6 +1,6 @@
 import warnings
 
-from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
+from ..nodes import LeftsNode, Leaf, Lift, Split, Ensemble, Tune, Feed
 from .labels import _make_label
 from .masks import _collect_masks
 from .predict import _Model, _predict
@@ -10,7 +10,7 @@ from inspect import signature
 
 
 def _fit(
-    node: PomapNode,
+    node: LeftsNode,
     df: DataFrame,
     hyperparameters: dict = None,
     label_context: dict = None,
@@ -32,7 +32,7 @@ def _fit(
         case Leaf(label=label, factory=factory):
             # Note: it is safe to use the passed hyperparameters
             # Without further filtering on label, because the hyperparameters
-            # Are passed from a LearnsFrom to every node beneath them in the tree.
+            # Are passed from a Tune to every node beneath them in the tree.
             model = factory(**hyperparameters)
             model_label = _make_label(label, label_context)
 
@@ -113,21 +113,17 @@ def _fit(
                 fitted_models |= child_fitted_models
                 output_hyperparameters |= child_learned_hyperparameters
 
-        case LearnsFrom(
-            learner=learner, learns_from=learns_from, learn_logic=learn_logic
-        ):
+        case Tune(consumer=consumer, source=source, logic=logic):
             source_models, learned_hyperparameters = _fit(
-                learns_from,
+                source,
                 df,
             )
 
-            learn_from_model = _Model(
-                learns_from, source_models, learned_hyperparameters
-            )
-            learned_hyperparameters |= learn_logic(learn_from_model, df)
+            tune_model = _Model(source, source_models, learned_hyperparameters)
+            learned_hyperparameters |= logic(tune_model, df)
 
-            learner_models, learner_hyperparameters = _fit(
-                learner,
+            consumer_models, consumer_hyperparameters = _fit(
+                consumer,
                 df,
                 learned_hyperparameters,
                 label_context,
@@ -135,8 +131,8 @@ def _fit(
                 precomputed_masks,
             )
 
-            fitted_models |= source_models | learner_models
-            output_hyperparameters |= learner_hyperparameters | learned_hyperparameters
+            fitted_models |= source_models | consumer_models
+            output_hyperparameters |= consumer_hyperparameters | learned_hyperparameters
 
         case Feed(source=source, consumer=consumer):
             _check_feed_row_compatibility(
@@ -176,8 +172,8 @@ def _fit(
 
 
 def _check_feed_row_compatibility(
-    source_root: PomapNode,
-    consumer_root: PomapNode,
+    source_root: LeftsNode,
+    consumer_root: LeftsNode,
     df: DataFrame,
     precomputed_masks: dict,
     label_context: dict,
@@ -194,7 +190,7 @@ def _check_feed_row_compatibility(
     # It's possible to have multiple leaves with separate train/test
     # Specification as one source (i.e. an ensemble with an aggregate)
     # Hence, we take the union of all child masks.
-    def union_mask(node: PomapNode, mask_kind: str) -> Expr:
+    def union_mask(node: LeftsNode, mask_kind: str) -> Expr:
         result = lit(False)
         for label in _collect_masks(node, label_context):
             result = result | precomputed_masks[label][mask_kind]
