@@ -152,20 +152,14 @@ def _fit(
                 precomputed_masks,
             )
 
-            # Predict will loop through every label which keys the precomputed_masks
-            # So before running predict on the source we need to subset down to
-            # Just the columns we need
-            source_labels = _collect_masks(source, label_context).keys()
-            source_precomputed_masks = {
-                label: precomputed_masks[label] for label in source_labels
-            }
-
-            # We run predict with the source model, so the consumer has predictions available.
+            # Predict the source so the consumer has its predictions available.
+            # Tree-recursive `_predict` only visits the source subtree, so we can
+            # pass the full `precomputed_masks` dict without scoping it down.
             augmented_df = _predict(
                 source,
                 source_models,
                 df,
-                source_precomputed_masks,
+                precomputed_masks,
                 label_context,
             )
             consumer_models, consumer_hyperparameters = _fit(

@@ -3,7 +3,7 @@ from typing import Iterator, Optional
 
 from polars import DataFrame, Series
 
-from ..nodes import PomapNode, Lift, Ensemble
+from ..nodes import PomapNode, Leaf, Lift, Split, Ensemble, LearnsFrom, Feed
 from .labels import _make_label, _collect_labels
 from .masks import _collect_masks
 
@@ -40,75 +40,111 @@ def _aggregate(node: PomapNode, df: DataFrame, label_context: dict) -> DataFrame
     return df.drop(*input_cols)
 
 
-def _apply_aggregations(
-    node: PomapNode,
-    df: DataFrame,
-    label_context: dict | None = None,
-) -> DataFrame:
-    label_context = label_context or {}
-
-    match node:
-        case Lift(name=name, values=values, child=child, aggregate_with=fn):
-            for value in values:
-                df = _apply_aggregations(child, df, label_context | {name: value})
-            if fn is not None:
-                df = _aggregate(node, df, label_context)
-        case Ensemble(aggregate_with=fn):
-            for child in node.children:
-                df = _apply_aggregations(child, df, label_context)
-            if fn is not None:
-                df = _aggregate(node, df, label_context)
-        case PomapNode():
-            for child in node.children:
-                df = _apply_aggregations(child, df, label_context)
-
-    return df
-
-
 def _predict(
     node: PomapNode,
     models: dict,
     df: DataFrame,
     precomputed_masks: dict | None = None,
     label_context: dict | None = None,
-):
-    """Predict every leaf in `precomputed_masks` and apply aggregations.
+    is_root: bool = True,
+) -> DataFrame:
+    """Walk the tree, predicting each leaf and applying each Lift/Ensemble
+    aggregation at the moment its children's columns are ready.
 
-    `precomputed_masks` and `label_context` are passthroughs for callers that
-    already hold an outer context (e.g. `Feed`'s `_fit` augmentation, which
-    passes a scoped subset of the outer dict and the current label context so
-    decorated leaf labels and aggregated column names match the surrounding
-    tree). When omitted, both default to root-level values: masks are computed
-    from `node`'s subtree and the label context is empty.
+    Recursing rather than running a flat leaf-loop is what lets a downstream
+    node (e.g. a Feed's consumer) read the aggregated output of an upstream
+    Lift — by the time we descend into the consumer, the source's Lift has
+    already aggregated.
+
+    `precomputed_masks` and `label_context` are passthroughs from callers that
+    already hold an outer context (e.g. `Feed`'s `_fit` augmentation passes the
+    outer dict + the current label context). When omitted at the root, masks
+    are computed from `node`'s subtree and the label context is empty.
     """
     label_context = label_context or {}
 
-    if "__pomap_row_index" in df.columns:
-        raise ValueError(
-            "Trying to create column __pomap_row_index but it already exists"
-        )
+    if is_root:
+        if "__pomap_row_index" in df.columns:
+            raise ValueError(
+                "Trying to create column __pomap_row_index but it already exists"
+            )
+        df = df.with_row_index(name="__pomap_row_index")
+        if precomputed_masks is None:
+            precomputed_masks = _collect_masks(node)
 
-    df = df.with_row_index(name="__pomap_row_index")
+    match node:
+        case Leaf(label=label):
+            full_label = _make_label(label, label_context)
+            test_mask = precomputed_masks[full_label]["test"]
+            test_df = df.filter(test_mask)
+            predictions = models[full_label].predict(test_df)
+            predictions = Series(name=full_label, values=predictions)
+            test_df = test_df.with_columns(predictions)
+            df = df.join(
+                test_df.select("__pomap_row_index", full_label),
+                on="__pomap_row_index",
+                coalesce=True,
+                how="left",
+            )
 
-    if precomputed_masks is None:
-        precomputed_masks = _collect_masks(node)
+        case Lift(child=child, name=name, values=values, aggregate_with=fn):
+            for value in values:
+                df = _predict(
+                    child,
+                    models,
+                    df,
+                    precomputed_masks,
+                    label_context | {name: value},
+                    is_root=False,
+                )
+            if fn is not None:
+                df = _aggregate(node, df, label_context)
 
-    # We compute the full space of output columns first, then apply aggregation post-hoc
-    for label, masks in precomputed_masks.items():
-        test_df = df.filter(masks["test"])
-        predictions = models[label].predict(test_df)
-        predictions = Series(name=label, values=predictions)
+        case Split(child=child):
+            df = _predict(
+                child, models, df, precomputed_masks, label_context, is_root=False
+            )
 
-        test_df = test_df.with_columns(predictions)
+        case Ensemble(aggregate_with=fn):
+            for child in node.children:
+                df = _predict(
+                    child,
+                    models,
+                    df,
+                    precomputed_masks,
+                    label_context,
+                    is_root=False,
+                )
+            if fn is not None:
+                df = _aggregate(node, df, label_context)
 
-        df = df.join(
-            test_df.select("__pomap_row_index", label),
-            on="__pomap_row_index",
-            coalesce=True,
-            how="left",
-        )
+        case Feed(source=source, consumer=consumer):
+            df = _predict(
+                source, models, df, precomputed_masks, label_context, is_root=False
+            )
+            df = _predict(
+                consumer, models, df, precomputed_masks, label_context, is_root=False
+            )
 
-    df = _apply_aggregations(node, df, label_context)
-    df = df.drop("__pomap_row_index")
+        case LearnsFrom(learner=learner, learns_from=learns_from):
+            df = _predict(
+                learns_from,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+            )
+            df = _predict(
+                learner,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+            )
+
+    if is_root:
+        df = df.drop("__pomap_row_index")
 
     return df
