@@ -33,7 +33,6 @@ def _fit(
             # Note: it is safe to use the passed hyperparameters
             # Without further filtering on label, because the hyperparameters
             # Are passed from a LearnsFrom to every node beneath them in the tree.
-
             model = factory(**hyperparameters)
             model_label = _make_label(label, label_context)
 
@@ -152,9 +151,6 @@ def _fit(
                 precomputed_masks,
             )
 
-            # Predict the source so the consumer has its predictions available.
-            # Tree-recursive `_predict` only visits the source subtree, so we can
-            # pass the full `precomputed_masks` dict without scoping it down.
             augmented_df = _predict(
                 source,
                 source_models,
