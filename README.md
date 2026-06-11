@@ -33,3 +33,4 @@ Lefts imposes some constraints on model interfaces.
 - We expect that data is passed to fit and predict as Polars dataframes.
 - The predict method returns an iterable, with the order of predictions matching the order on the input training data frame.
 
+See the example notebooks to understand how to adapt your models to the required format.
