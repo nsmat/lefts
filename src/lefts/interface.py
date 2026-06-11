@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
-from polars import DataFrame
+from polars import DataFrame, Expr
 
 from .interpreter.fit import _fit
 from .interpreter.predict import _Model
@@ -24,9 +24,6 @@ class Model(_Model):
     def print_tree(self):
         print(_print_tree(self.root))
 
-    def view_labels_dataframe(self) -> DataFrame:
-        raise NotImplementedError()
-
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
 
@@ -46,6 +43,17 @@ class Model(_Model):
 
 
 def leaf(model_constructor: Callable[..., Any], label: str) -> Model:
+    """
+    Converts a model into the format required for transformation by lefts.
+
+    Parameters
+    ----------
+    model_constructor
+        A constructor that creates a model with ``.fit()`` and ``.predict()`` methods.
+    label
+        A label for keeping track of this model.
+    """
+
     leaf_node = Leaf(label=label, factory=model_constructor)
     return Model(leaf_node)
 
@@ -59,6 +67,33 @@ def lift(
     validation_filter=None,
     aggregate_with=None,
 ) -> Model:
+    """
+    Creates multiple copies of a model that are trained on (possibly overlapping) train, test and validation sets.
+
+    Parameters
+    ----------
+    model
+        A lefts Model object.
+    values
+        Values to lift the model over. One copy of the model will be trained for each value.
+    name
+        The name of the lift transformation. Has no effect on model training, but controls how the resulting
+        models are labelled and addressed: each leaf beneath the lift gets a label of the form
+        ``"<leaf>[<name>=<value>]"``. When ``aggregate_with`` is set, the per-value columns are instead
+        collapsed into a single output column named ``name``.
+    train_filter
+        A function mapping each value in ``values`` to a boolean Polars expression indicating whether a given
+        row is in the train set associated with that value.
+    test_filter
+        A function mapping each value in ``values`` to a boolean Polars expression indicating whether a given
+        row is in the test set associated with that value.
+    validation_filter
+        A function mapping each value in ``values`` to a boolean Polars expression indicating whether a given
+        row is in the validation set associated with that value.
+    aggregate_with
+        A function that postprocesses the output columns of the lift. It is called on the set of columns
+        output by the lifted ``.predict()``.
+    """
     lifted = Lift(
         child=model.root,
         values=values,
@@ -75,10 +110,26 @@ def lift(
 def split(
     name: str,
     model: Model,
-    train_filter,
-    test_filter,
-    validation_filter=None,
+    train_filter: Expr,
+    test_filter: Expr,
+    validation_filter: Expr | None= None,
 ) -> Model:
+    """
+    Restricts a model to train, test and (optionally) validate on defined subsets of the available data.
+
+    Parameters
+    ----------
+    name
+        A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
+    model
+        A lefts Model object.
+    train_filter
+        A boolean Polars expression that indicates whether a given row is in the train set.
+    test_filter
+        A boolean Polars expression that indicates whether a given row is in the test set.
+    validation_filter
+        A boolean Polars expression that indicates whether a given row is in the validation set.
+    """
     node = Split(
         name=name,
         child=model.root,
@@ -91,6 +142,19 @@ def split(
 
 
 def ensemble(name: str, *models, aggregate_with=None):
+    """
+    Binds multiple models into a unified model that fits and predicts all of them in parallel.
+
+    Parameters
+    ----------
+    name: A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
+    models: lefts Model objects
+    aggregate_with: a function that postprocesses the output columns of the ensemble .predict() method.
+
+    Returns
+    -------
+
+    """
     roots = [model.root for model in models]
     node = Ensemble(name, roots, aggregate_with=aggregate_with)
 
@@ -100,12 +164,38 @@ def ensemble(name: str, *models, aggregate_with=None):
 def tune(
     name: str, consumer: Model, source: Model, logic: Callable[[Model, DataFrame], dict]
 ):
+    """
+    Learn hyperparameters by fitting the source model, applying customisable logic, then passing a dictionary of
+        hyperparameters to the consumer.
+    Parameters
+    ----------
+    name: A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
+    consumer
+    source
+    logic
+
+    Returns
+    -------
+
+    """
     node = Tune(name=name, consumer=consumer.root, source=source.root, logic=logic)
 
     return Model(node)
 
 
 def feed(name: str, source: Model, consumer: Model) -> Model:
+    """
+    Chains two models: the source's predictions are available to the consumer as a feature or target during .fit and .predict.
+    Parameters
+    ----------
+    name: A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
+    source: A lefts Model object, which provides the output of its predict to the consumer.
+    consumer: A lefts Model object, which has access to the prediction output of the consumer.
+
+    Returns
+    -------
+
+    """
     node = Feed(name=name, source=source.root, consumer=consumer.root)
 
     return Model(node)
