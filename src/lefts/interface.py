@@ -112,7 +112,7 @@ def split(
     model: Model,
     train_filter: Expr,
     test_filter: Expr,
-    validation_filter: Expr | None= None,
+    validation_filter: Expr | None = None,
 ) -> Model:
     """
     Restricts a model to train, test and (optionally) validate on defined subsets of the available data.
@@ -147,13 +147,12 @@ def ensemble(name: str, *models, aggregate_with=None):
 
     Parameters
     ----------
-    name: A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
-    models: lefts Model objects
-    aggregate_with: a function that postprocesses the output columns of the ensemble .predict() method.
-
-    Returns
-    -------
-
+    name
+        A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
+    models
+        lefts Model objects.
+    aggregate_with
+        A function that postprocesses the output columns of the ensemble ``.predict()`` method.
     """
     roots = [model.root for model in models]
     node = Ensemble(name, roots, aggregate_with=aggregate_with)
