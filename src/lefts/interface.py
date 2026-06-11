@@ -164,18 +164,22 @@ def tune(
     name: str, consumer: Model, source: Model, logic: Callable[[Model, DataFrame], dict]
 ):
     """
-    Learn hyperparameters by fitting the source model, applying customisable logic, then passing a dictionary of
-        hyperparameters to the consumer.
+    Learn hyperparameters by fitting the source model, applying customisable logic, then passing the resulting
+    dictionary of hyperparameters to the consumer.
+
     Parameters
     ----------
-    name: A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
+    name
+        A name used to keep track of this lefts operation in the workflow. Has no effect on model training.
     consumer
+        A lefts Model object. Its leaf factories are instantiated using the outputs of ``logic`` as keyword
+        arguments.
     source
+        A lefts Model object. It is fitted first; the fitted model is then handed to ``logic`` to derive the
+        hyperparameters.
     logic
-
-    Returns
-    -------
-
+        A callable ``(fitted_source_model, df) -> dict`` that reads the fitted source and returns the
+        hyperparameters to apply when fitting the consumer.
     """
     node = Tune(name=name, consumer=consumer.root, source=source.root, logic=logic)
 
