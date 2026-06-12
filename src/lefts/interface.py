@@ -21,8 +21,8 @@ class Model(_Model):
         self.models = models
         self.hyperparameters = hyperparameters
 
-    def print_tree(self):
-        print(_print_tree(self.root))
+    def print_tree(self, print_all_labels: bool = False):
+        print(_print_tree(self.root, print_all_labels=print_all_labels))
 
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)

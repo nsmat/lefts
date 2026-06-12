@@ -21,10 +21,6 @@ class LeftsNode(ABC):
         """Return iterable of child nodes."""
         ...
 
-    @property
-    @abstractmethod
-    def tree_repr(self) -> str: ...
-
 
 @dataclass
 class Leaf(LeftsNode):
@@ -34,10 +30,6 @@ class Leaf(LeftsNode):
     @property
     def children(self):
         return []
-
-    @property
-    def tree_repr(self) -> str:
-        return self.label
 
     @property
     def name(self) -> str:
@@ -61,10 +53,6 @@ class Lift(LeftsNode):
     def children(self) -> Iterable["LeftsNode"]:
         return [self.child]
 
-    @property
-    def tree_repr(self) -> str:
-        return f"{self.name}: {self.values}"
-
 
 @dataclass
 class Split(LeftsNode):
@@ -78,10 +66,6 @@ class Split(LeftsNode):
     def children(self) -> Iterable["LeftsNode"]:
         return [self.child]
 
-    @property
-    def tree_repr(self) -> str:
-        return f"Split: {self.name}"
-
 
 @dataclass
 class Ensemble(LeftsNode):
@@ -92,10 +76,6 @@ class Ensemble(LeftsNode):
     @property
     def children(self):
         return self.models
-
-    @property
-    def tree_repr(self) -> str:
-        return f"Ensemble: {self.name}"
 
 
 @dataclass
@@ -112,10 +92,6 @@ class Tune(LeftsNode):
     def children(self) -> Iterable["LeftsNode"]:
         return [self.source, self.consumer]
 
-    @property
-    def tree_repr(self) -> str:
-        return f"Tune: {self.name}"
-
 
 @dataclass
 class Feed(LeftsNode):
@@ -126,7 +102,3 @@ class Feed(LeftsNode):
     @property
     def children(self) -> Iterable["LeftsNode"]:
         return [self.source, self.consumer]
-
-    @property
-    def tree_repr(self) -> str:
-        return f"Feed: {self.name}"
