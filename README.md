@@ -37,6 +37,8 @@ See the example notebooks to understand how to adapt your models to the required
 
 # A quick example - a rolling retrain of 10 quantile target lightgbms
 
+See notebooks/quantile_ensemble.py for the full code.
+
 ```python
 features = ["temp", "atemp", "hum", "windspeed", "hr", "weekday", "mnth"]
 target = "cnt"

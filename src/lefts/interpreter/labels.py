@@ -32,21 +32,34 @@ def _aggregation_suffix(node: LeftsNode) -> str:
     return f'  ⇒ {fn_name} → "{node.name}"'
 
 
+def _count_models(node: LeftsNode) -> int:
+    """How many leaf models this subtree fits."""
+    match node:
+        case Leaf():
+            return 1
+        case Lift(child=child, values=values):
+            return len(values) * _count_models(child)
+        case _:
+            return sum(_count_models(child) for child in node.children)
+
+
 def _node_header(node: LeftsNode, print_all_labels: bool) -> str:
+    count = _count_models(node)
+    models = f" ({count} model{'' if count == 1 else 's'})"
     match node:
         case Leaf(label=label):
-            return f"Leaf '{label}'"
+            return f"Leaf '{label}'{models}"
         case Lift(name=name, values=values):
             vals = _format_list(values, print_all_labels)
-            return f"Lift '{name}': {vals}{_aggregation_suffix(node)}"
+            return f"Lift '{name}'{models}: {vals}{_aggregation_suffix(node)}"
         case Split(name=name):
-            return f"Split '{name}'"
+            return f"Split '{name}'{models}"
         case Ensemble(name=name):
-            return f"Ensemble '{name}'{_aggregation_suffix(node)}"
+            return f"Ensemble '{name}'{models}{_aggregation_suffix(node)}"
         case Tune(name=name):
-            return f"Tune '{name}'"
+            return f"Tune '{name}'{models}"
         case Feed(name=name):
-            return f"Feed '{name}'"
+            return f"Feed '{name}'{models}"
         case _:
             return getattr(node, "name", repr(node))
 
