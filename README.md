@@ -45,6 +45,10 @@ See notebooks/quantile_ensemble.py for the full code.
 from lefts import leaf, lift, ensemble
 from lefts.helpers import tabular_model
 
+import polars as pl
+from lightgbm import LGBMRegressor
+import datetime as dt
+
 features = ["temp", "atemp", "hum", "windspeed", "hr", "weekday", "mnth"]
 target = "cnt"
 quantiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
