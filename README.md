@@ -6,11 +6,11 @@ Lefts is a very simple domain specific language for building complex machine lea
 - Allow a model to create features or targets for another model.
 - And any creative combination of the above.
 
-Without making subsequent model evaluation, storage, or experimentation any more complex than it was with the original model. This implementation is built on top of the excellent Polars DataFrame library.
+Without making subsequent model fitting or evaluation or experimentation any more complex than it was with the original model. This implementation is built on top of the excellent Polars DataFrame library.
 
 
 # Commands
-Lefts has five commands, which give it it's name:
+Lefts has five commands, which give it its name:
 - **L**ift: trains multiple copies of a model across different subsets of data.
 - **E**nsemble: Takes a set of models and makes them evaluate as one.
 - **T**une: Allows a model to learn its hyperparameters from another.
