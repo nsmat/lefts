@@ -89,10 +89,6 @@ predictions = model.predict(df)
 
 Behind the scenes, the full workflow is constructed as a tree of lefts expression. You can see this tree by calling `model.print_tree()`
 
-```python
-model.print_tree()
-```
-
 ```
 Ensemble 'quantiles' (198 models)  → outputs: [q0.1_rolling_retrain, ..., q0.9_rolling_retrain]
     ├── Lift 'q0.1_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.1_rolling_retrain"
