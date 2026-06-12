@@ -35,7 +35,9 @@ Lefts imposes some constraints on model interfaces.
 
 See the example notebooks to understand how to adapt your models to the required format.
 
-# A quick example - a rolling retrain of 10 quantile target lightgbms
+# An example
+
+The following code shows lefts can be used to create complex models out of more basic ones. We start with an LGBM Regression model, and train an ensemble of models to predict each quantile. The ensemble is trained in a monthly rolling retrain.
 
 See notebooks/quantile_ensemble.py for the full code.
 
@@ -67,8 +69,9 @@ for q in quantiles:
         name=f"q{q}_rolling_retrain",
         values=test_period_start_dates,
 
-        # A row is in a given train period if it is 
+        # A row is in a given train period if it is before the start of the test period
         train_filter=lambda test_period_start_date: pl.col("datetime") < test_period_start_date,
+        # Each test period is one month long
         test_filter=lambda test_period_start_date: pl.col("datetime").dt.month() == test_period_start_date.month,
         aggregate_with=pl.coalesce,
     )
@@ -82,4 +85,32 @@ model.fit(df)
 
 # Adds |quantiles| columns, each with the unique prediction associated with that test row. 
 predictions = model.predict(df)
+```
+
+Behind the scenes, the full workflow is constructed as a tree of lefts expression. You can see this tree by calling `model.print_tree()`
+
+```python
+model.print_tree()
+```
+
+```
+Ensemble 'quantiles' (198 models)  → outputs: [q0.1_rolling_retrain, ..., q0.9_rolling_retrain]
+    ├── Lift 'q0.1_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.1_rolling_retrain"
+    │   └── Leaf 'q0.1' (1 model)
+    ├── Lift 'q0.2_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.2_rolling_retrain"
+    │   └── Leaf 'q0.2' (1 model)
+    ├── Lift 'q0.3_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.3_rolling_retrain"
+    │   └── Leaf 'q0.3' (1 model)
+    ├── Lift 'q0.4_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.4_rolling_retrain"
+    │   └── Leaf 'q0.4' (1 model)
+    ├── Lift 'q0.5_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.5_rolling_retrain"
+    │   └── Leaf 'q0.5' (1 model)
+    ├── Lift 'q0.6_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.6_rolling_retrain"
+    │   └── Leaf 'q0.6' (1 model)
+    ├── Lift 'q0.7_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.7_rolling_retrain"
+    │   └── Leaf 'q0.7' (1 model)
+    ├── Lift 'q0.8_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.8_rolling_retrain"
+    │   └── Leaf 'q0.8' (1 model)
+    └── Lift 'q0.9_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.9_rolling_retrain"
+        └── Leaf 'q0.9' (1 model)
 ```
