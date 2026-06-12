@@ -79,7 +79,7 @@ def lift(
     name
         The name of the lift transformation. Has no effect on model training, but controls how the resulting
         models are labelled and addressed: each leaf beneath the lift gets a label of the form
-        ``"<leaf>[<name>=<value>]"``. When ``aggregate_with`` is set, the per-value columns are instead
+        ``"<leaf label>[<name>=<value>]"``. When ``aggregate_with`` is set, the per-value columns are instead
         collapsed into a single output column named ``name``.
     train_filter
         A function mapping each value in ``values`` to a boolean Polars expression indicating whether a given
