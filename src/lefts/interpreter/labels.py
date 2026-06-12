@@ -15,13 +15,6 @@ def _make_label(leaf_name: str, label_context: dict) -> str:
 _MAX_LIST = 6
 
 
-def _sorted(values) -> list:
-    try:
-        return sorted(values)
-    except TypeError:
-        return sorted(values, key=str)
-
-
 def _format_list(items, print_all_labels: bool) -> str:
     items = list(items)
     if print_all_labels or len(items) <= _MAX_LIST:
@@ -43,10 +36,9 @@ def _node_header(node: LeftsNode, print_all_labels: bool) -> str:
     match node:
         case Leaf(label=label):
             return f"Leaf '{label}'"
-        case Lift(name=name, values=values, aggregate_with=fn):
-            vals = _format_list(_sorted(values), print_all_labels)
-            suffix = _aggregation_suffix(node) if fn is not None else "  (fan-out, no aggregation)"
-            return f"Lift '{name}': {vals}{suffix}"
+        case Lift(name=name, values=values):
+            vals = _format_list(values, print_all_labels)
+            return f"Lift '{name}': {vals}{_aggregation_suffix(node)}"
         case Split(name=name):
             return f"Split '{name}'"
         case Ensemble(name=name):
@@ -69,7 +61,7 @@ def _print_tree(
     header = _node_header(node, print_all_labels)
 
     if is_root:
-        outputs = _format_list(_sorted(_collect_labels(node)), print_all_labels)
+        outputs = _format_list(_collect_labels(node), print_all_labels)
         lines = [f"{header}  → outputs: {outputs}"]
         child_prefix = "    "
     else:

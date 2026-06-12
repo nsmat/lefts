@@ -47,7 +47,9 @@ class Lift(LeftsNode):
     aggregate_with: Callable[..., Expr] | None = None
 
     def __post_init__(self):
-        self.values = set(self.values)
+        if len(set(self.values)) != len(self.values):
+            raise ValueError("values must contain no duplicates")
+        self.values = list(self.values)
 
     @property
     def children(self) -> Iterable["LeftsNode"]:
