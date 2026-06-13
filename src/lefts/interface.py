@@ -30,8 +30,8 @@ class Model(_Model):
         ----------
         logging
             Determines how we handle each leaf model's stdout/stderr during fit:
-                - print: leaves it untouched
-                - drop: discards it
+                - print: stdout/stderr from each model will behave as normal
+                - drop: stdout/stderr from all models will be dropped.
                 - capture: collects it into self.logs keyed by model label.
         errors
             Determines how we handle exceptions that raise during fit:
@@ -39,6 +39,7 @@ class Model(_Model):
              - capture: records the exception in self.exceptions, keyed by model label,
                 and continues fitting the remaining models.
         """
+
         logs, exceptions = {}, {}
         models, hyperparameters = _fit(
             self.root,
