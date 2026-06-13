@@ -3,6 +3,7 @@ name = "lefts"
 license = "Apache-2.0"
 version = "0.1.0"
 description = "Composable transformations for model experimentation"
+readme = "README.md"
 authors = [
     { name = "Niklas Mather", email = "niksmather@gmail.com" }
 ]
@@ -10,6 +11,21 @@ requires-python = ">=3.10"
 dependencies = [
     "polars",
 ]
+keywords = ["machine-learning", "ensemble", "cross-validation", "polars", "dsl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/nsmat/lefts"
+Repository = "https://github.com/nsmat/lefts"
 
 [tool.ruff.lint]
 ignore = ["E731"] # Allows the use of lambdas as variables

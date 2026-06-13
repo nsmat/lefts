@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
@@ -16,10 +17,41 @@ class Model(_Model):
     def __post_init__(self):
         _validate(self.root)
 
-    def fit(self, df: DataFrame):
-        models, hyperparameters = _fit(self.root, df)
+    def fit(self, df: DataFrame, logging: str = "print", errors: str = "raise"):
+        """
+        Fit every leaf model in the tree.
+
+        Parameters
+        ----------
+        logging
+            How to handle each leaf model's stdout/stderr: ``'print'`` leaves it
+            untouched, ``'drop'`` discards it, ``'capture'`` collects it into
+            ``self.logs`` keyed by model label.
+        errors
+            How to handle a leaf model that raises during fit: ``'raise'`` halts the
+            whole fit, ``'capture'`` records the exception in ``self.exceptions`` keyed
+            by model label and continues fitting the remaining models.
+        """
+        logs, exceptions = {}, {}
+        models, hyperparameters = _fit(
+            self.root,
+            df,
+            logging=logging,
+            errors=errors,
+            logs=logs,
+            exceptions=exceptions,
+        )
         self.models = models
         self.hyperparameters = hyperparameters
+        self.logs = logs
+        self.exceptions = exceptions
+
+        if exceptions:
+            warnings.warn(
+                f"{len(exceptions)} model(s) failed to train: {sorted(exceptions)}",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def print_tree(self, print_all_labels: bool = False):
         print(_print_tree(self.root, print_all_labels=print_all_labels))

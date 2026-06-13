@@ -1,4 +1,6 @@
+import io
 import warnings
+from contextlib import contextmanager, redirect_stdout, redirect_stderr
 
 from ..nodes import LeftsNode, Leaf, Lift, Split, Ensemble, Tune, Feed
 from .labels import _make_label
@@ -9,6 +11,32 @@ from polars import DataFrame, Expr, lit
 from inspect import signature
 
 
+class UpstreamFitFailure(RuntimeError):
+    """Raised/recorded when a Feed/Tune consumer is skipped because its source failed to fit."""
+
+
+@contextmanager
+def _capture_output(mode: str):
+    """
+    Redirect a leaf model's stdout and stderr according to `mode`.
+
+    For 'print', streams are left alone and None is yielded. For 'capture' and
+    'drop', both streams are redirected into a single buffer (yielded so the
+    caller can read it under 'capture'; discarded under 'drop').
+    """
+    if mode == "print":
+        yield None
+        return
+    buffer = io.StringIO()
+    with redirect_stdout(buffer), redirect_stderr(buffer):
+        yield buffer
+
+
+def _failed_in_subtree(node: LeftsNode, label_context: dict, exceptions: dict) -> set:
+    """Labels of leaves in `node`'s subtree that are recorded as failed."""
+    return set(_collect_masks(node, label_context)) & set(exceptions)
+
+
 def _fit(
     node: LeftsNode,
     df: DataFrame,
@@ -16,16 +44,30 @@ def _fit(
     label_context: dict = None,
     is_root=True,
     precomputed_masks: dict = None,
+    logging: str = "print",
+    errors: str = "raise",
+    logs: dict = None,
+    exceptions: dict = None,
 ) -> Tuple[dict[str, Any], dict[str, Any]]:
 
     label_context = label_context or dict()
     hyperparameters = hyperparameters or dict()
+    logs = logs if logs is not None else dict()
+    exceptions = exceptions if exceptions is not None else dict()
 
     # Define output types
     fitted_models: dict[str, Any] = {}
     output_hyperparameters: dict[str, Any] = {}
 
     if is_root:
+        if logging not in {"capture", "drop", "print"}:
+            raise ValueError(
+                f"logging must be one of 'capture', 'drop', 'print', got {logging!r}"
+            )
+        if errors not in {"capture", "raise"}:
+            raise ValueError(
+                f"errors must be one of 'capture', 'raise', got {errors!r}"
+            )
         precomputed_masks = _collect_masks(node)
 
     match node:
@@ -70,9 +112,21 @@ def _fit(
                     f"Validation set created but model {label} .fit has no validation_set argument"
                 )
 
-            model.fit(train_df, **fit_kwargs)
+            with _capture_output(logging) as buffer:
+                try:
+                    model.fit(train_df, **fit_kwargs)
+                    failed = False
+                except Exception as exc:
+                    if errors == "raise":
+                        raise
+                    exceptions[model_label] = exc
+                    failed = True
 
-            fitted_models[model_label] = model
+            if logging == "capture" and buffer is not None:
+                logs[model_label] = buffer.getvalue()
+
+            if not failed:
+                fitted_models[model_label] = model
 
         case Lift(child=child, values=values, name=name):
             # Under a lift, we will take the cartesian product
@@ -88,6 +142,10 @@ def _fit(
                     extended_label_context,
                     False,
                     precomputed_masks,
+                    logging=logging,
+                    errors=errors,
+                    logs=logs,
+                    exceptions=exceptions,
                 )
 
                 fitted_models |= child_models
@@ -101,6 +159,10 @@ def _fit(
                 label_context,
                 False,
                 precomputed_masks,
+                logging=logging,
+                errors=errors,
+                logs=logs,
+                exceptions=exceptions,
             )
             fitted_models |= child_models
             output_hyperparameters |= child_hyperparameters
@@ -108,7 +170,16 @@ def _fit(
         case Ensemble():
             for child in node.children:
                 child_fitted_models, child_learned_hyperparameters = _fit(
-                    child, df, hyperparameters, label_context, False, precomputed_masks
+                    child,
+                    df,
+                    hyperparameters,
+                    label_context,
+                    False,
+                    precomputed_masks,
+                    logging=logging,
+                    errors=errors,
+                    logs=logs,
+                    exceptions=exceptions,
                 )
                 fitted_models |= child_fitted_models
                 output_hyperparameters |= child_learned_hyperparameters
@@ -117,22 +188,39 @@ def _fit(
             source_models, learned_hyperparameters = _fit(
                 source,
                 df,
+                logging=logging,
+                errors=errors,
+                logs=logs,
+                exceptions=exceptions,
             )
 
-            tune_model = _Model(source, source_models, learned_hyperparameters)
-            learned_hyperparameters |= logic(tune_model, df)
+            if errors == "capture" and _failed_in_subtree(source, {}, exceptions):
+                exceptions[node.name] = UpstreamFitFailure(
+                    f"Tune '{node.name}' consumer skipped: source models failed to fit "
+                    f"({sorted(_failed_in_subtree(source, {}, exceptions))})"
+                )
+                fitted_models |= source_models
+            else:
+                tune_model = _Model(source, source_models, learned_hyperparameters)
+                learned_hyperparameters |= logic(tune_model, df)
 
-            consumer_models, consumer_hyperparameters = _fit(
-                consumer,
-                df,
-                learned_hyperparameters,
-                label_context,
-                False,
-                precomputed_masks,
-            )
+                consumer_models, consumer_hyperparameters = _fit(
+                    consumer,
+                    df,
+                    learned_hyperparameters,
+                    label_context,
+                    False,
+                    precomputed_masks,
+                    logging=logging,
+                    errors=errors,
+                    logs=logs,
+                    exceptions=exceptions,
+                )
 
-            fitted_models |= source_models | consumer_models
-            output_hyperparameters |= consumer_hyperparameters | learned_hyperparameters
+                fitted_models |= source_models | consumer_models
+                output_hyperparameters |= (
+                    consumer_hyperparameters | learned_hyperparameters
+                )
 
         case Feed(source=source, consumer=consumer):
             _check_feed_row_compatibility(
@@ -145,25 +233,45 @@ def _fit(
                 label_context,
                 False,
                 precomputed_masks,
+                logging=logging,
+                errors=errors,
+                logs=logs,
+                exceptions=exceptions,
             )
 
-            augmented_df = _predict(
-                source,
-                source_models,
-                df,
-                precomputed_masks,
-                label_context,
-            )
-            consumer_models, consumer_hyperparameters = _fit(
-                consumer,
-                augmented_df,
-                hyperparameters,
-                label_context,
-                False,
-                precomputed_masks,
-            )
-            fitted_models |= source_models | consumer_models
-            output_hyperparameters |= source_hyperparameters | consumer_hyperparameters
+            if errors == "capture" and _failed_in_subtree(
+                source, label_context, exceptions
+            ):
+                exceptions[node.name] = UpstreamFitFailure(
+                    f"Feed '{node.name}' consumer skipped: source models failed to fit "
+                    f"({sorted(_failed_in_subtree(source, label_context, exceptions))})"
+                )
+                fitted_models |= source_models
+                output_hyperparameters |= source_hyperparameters
+            else:
+                augmented_df = _predict(
+                    source,
+                    source_models,
+                    df,
+                    precomputed_masks,
+                    label_context,
+                )
+                consumer_models, consumer_hyperparameters = _fit(
+                    consumer,
+                    augmented_df,
+                    hyperparameters,
+                    label_context,
+                    False,
+                    precomputed_masks,
+                    logging=logging,
+                    errors=errors,
+                    logs=logs,
+                    exceptions=exceptions,
+                )
+                fitted_models |= source_models | consumer_models
+                output_hyperparameters |= (
+                    source_hyperparameters | consumer_hyperparameters
+                )
 
         case _:
             raise ValueError(f"Unknown node type {type(node)}")

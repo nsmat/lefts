@@ -13,6 +13,8 @@ class _Model:
     root: LeftsNode
     models: Optional[dict] = None
     hyperparameters: Optional[dict] = None
+    logs: Optional[dict] = None
+    exceptions: Optional[dict] = None
 
     def predict(self, df: DataFrame):
         return _predict(self.root, self.models, df)
