@@ -20,7 +20,7 @@ class Model(_Model):
     def fit(
         self,
         df: DataFrame,
-        logging: Literal["print", "capture", "drop"] = "print",
+        logging: Literal["print", "capture", "drop"] = "capture",
         errors: Literal["raise", "store"] = "raise",
     ):
         """
@@ -29,13 +29,15 @@ class Model(_Model):
         Parameters
         ----------
         logging
-            How to handle each leaf model's stdout/stderr: ``'print'`` leaves it
-            untouched, ``'drop'`` discards it, ``'capture'`` collects it into
-            ``self.logs`` keyed by model label.
+            Determines how we handle each leaf model's stdout/stderr during fit:
+                - print: leaves it untouched
+                - drop: discards it
+                - capture: collects it into self.logs keyed by model label.
         errors
-            How to handle a leaf model that raises during fit: ``'raise'`` halts the
-            whole fit, ``'capture'`` records the exception in ``self.exceptions`` keyed
-            by model label and continues fitting the remaining models.
+            Determines how we handle exceptions that raise during fit:
+             - raise: an error in the fit of any leaf halts the fit call
+             - capture: records the exception in self.exceptions, keyed by model label,
+                and continues fitting the remaining models.
         """
         logs, exceptions = {}, {}
         models, hyperparameters = _fit(
