@@ -1,6 +1,6 @@
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 
 from polars import DataFrame, Expr
 
@@ -17,7 +17,12 @@ class Model(_Model):
     def __post_init__(self):
         _validate(self.root)
 
-    def fit(self, df: DataFrame, logging: str = "print", errors: str = "raise"):
+    def fit(
+        self,
+        df: DataFrame,
+        logging: Literal["print", "capture", "drop"] = "print",
+        errors: Literal["raise", "store"] = "raise",
+    ):
         """
         Fit every leaf model in the tree.
 
