@@ -61,6 +61,25 @@ class Model(_Model):
                 stacklevel=2,
             )
 
+    def predict(
+        self,
+        df: DataFrame,
+        errors: Literal["raise", "skip_unfit_models", "output_nan"] = "raise",
+    ) -> DataFrame:
+        """
+        Run predict for every fitted leaf model in the tree.
+
+        Parameters
+        ----------
+        errors
+            Determines how leaf models that were not fitted (e.g. because fit was called
+            with errors='store' and they raised) are handled during predict:
+                - raise: raises a RuntimeError if any model is missing from self.models.
+                - skip_unfit_models: silently omits the output column for any unfit model.
+                - output_nan: adds the output column but fills it entirely with null.
+        """
+        return super().predict(df, errors=errors)
+
     def print_tree(self, print_all_labels: bool = False):
         print(_print_tree(self.root, print_all_labels=print_all_labels))
 
