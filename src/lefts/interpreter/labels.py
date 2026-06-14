@@ -43,23 +43,43 @@ def _count_models(node: LeftsNode) -> int:
             return sum(_count_models(child) for child in node.children)
 
 
-def _node_header(node: LeftsNode, print_all_labels: bool) -> str:
+def _count_fit_models(node: LeftsNode, label_context: dict, models: dict) -> int:
+    return len(set(_collect_labels(node, label_context)) & set(models))
+
+
+def _node_header(
+    node: LeftsNode,
+    print_all_labels: bool,
+    models: dict | None = None,
+    label_context: dict | None = None,
+) -> str:
+    label_context = label_context or {}
     count = _count_models(node)
-    models = f" ({count} model{'' if count == 1 else 's'})"
+
+    if models is not None:
+        fit_count = _count_fit_models(node, label_context, models)
+        failed = count - fit_count
+        if failed > 0:
+            model_str = f" ({count} models, {failed} failed)"
+        else:
+            model_str = f" ({count} model{'' if count == 1 else 's'})"
+    else:
+        model_str = f" ({count} model{'' if count == 1 else 's'})"
+
     match node:
         case Leaf(label=label):
-            return f"Leaf '{label}'{models}"
+            return f"Leaf '{label}'{model_str}"
         case Lift(name=name, values=values):
             vals = _format_list(values, print_all_labels)
-            return f"Lift '{name}'{models}: {vals}{_aggregation_suffix(node)}"
+            return f"Lift '{name}'{model_str}: {vals}{_aggregation_suffix(node)}"
         case Split(name=name):
-            return f"Split '{name}'{models}"
+            return f"Split '{name}'{model_str}"
         case Ensemble(name=name):
-            return f"Ensemble '{name}'{models}{_aggregation_suffix(node)}"
+            return f"Ensemble '{name}'{model_str}{_aggregation_suffix(node)}"
         case Tune(name=name):
-            return f"Tune '{name}'{models}"
+            return f"Tune '{name}'{model_str}"
         case Feed(name=name):
-            return f"Feed '{name}'{models}"
+            return f"Feed '{name}'{model_str}"
         case _:
             return getattr(node, "name", repr(node))
 
@@ -70,8 +90,11 @@ def _print_tree(
     prefix: str = "",
     is_root: bool = True,
     is_last: bool = True,
+    models: dict | None = None,
+    label_context: dict | None = None,
 ) -> str:
-    header = _node_header(node, print_all_labels)
+    label_context = label_context or {}
+    header = _node_header(node, print_all_labels, models=models, label_context=label_context)
 
     if is_root:
         outputs = _format_list(_collect_labels(node), print_all_labels)
@@ -91,6 +114,8 @@ def _print_tree(
                 prefix=child_prefix,
                 is_root=False,
                 is_last=(i == len(children) - 1),
+                models=models,
+                label_context=label_context,
             )
         )
 
