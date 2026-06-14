@@ -43,8 +43,24 @@ def _count_models(node: LeftsNode) -> int:
             return sum(_count_models(child) for child in node.children)
 
 
+def _collect_leaf_labels(
+    node: LeftsNode, label_context: dict | None = None
+) -> Iterator[str]:
+    """Like _collect_labels but always descends to leaves, ignoring aggregation."""
+    label_context = label_context or {}
+    match node:
+        case Leaf(label=label):
+            yield _make_label(label, label_context)
+        case Lift(child=child, name=name, values=values):
+            for value in values:
+                yield from _collect_leaf_labels(child, label_context | {name: value})
+        case LeftsNode():
+            for child in node.children:
+                yield from _collect_leaf_labels(child, label_context)
+
+
 def _count_fit_models(node: LeftsNode, label_context: dict, models: dict) -> int:
-    return len(set(_collect_labels(node, label_context)) & set(models))
+    return len(set(_collect_leaf_labels(node, label_context)) & set(models))
 
 
 def _node_header(
@@ -60,7 +76,7 @@ def _node_header(
         fit_count = _count_fit_models(node, label_context, models)
         failed = count - fit_count
         if failed > 0:
-            model_str = f" ({count} models, {failed} failed)"
+            model_str = f" ({count} model{'' if count == 1 else 's'}, {failed} failed)"
         else:
             model_str = f" ({count} model{'' if count == 1 else 's'})"
     else:
@@ -106,6 +122,7 @@ def _print_tree(
         child_prefix = prefix + ("    " if is_last else "│   ")
 
     children = list(node.children)
+    child_models = None if isinstance(node, Lift) else models
     for i, child in enumerate(children):
         lines.append(
             _print_tree(
@@ -114,7 +131,7 @@ def _print_tree(
                 prefix=child_prefix,
                 is_root=False,
                 is_last=(i == len(children) - 1),
-                models=models,
+                models=child_models,
                 label_context=label_context,
             )
         )
