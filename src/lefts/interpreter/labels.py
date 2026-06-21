@@ -10,8 +10,6 @@ def _make_label(leaf_name: str, label_context: dict) -> str:
     return f"{leaf_name}[{dims}]"
 
 
-
-
 def _format_list(items, print_all_labels: bool) -> str:
     items = list(items)
     if print_all_labels or len(items) <= 6:
@@ -29,7 +27,6 @@ def _aggregation_suffix(node: LeftsNode) -> str:
     return f'  ⇒ {fn_name} → "{node.name}"'
 
 
-
 def _collect_unaggregated_labels(
     node: LeftsNode, label_context: dict | None = None
 ) -> Iterator[str]:
@@ -40,7 +37,9 @@ def _collect_unaggregated_labels(
             yield _make_label(label, label_context)
         case Lift(child=child, name=name, values=values):
             for value in values:
-                yield from _collect_unaggregated_labels(child, label_context | {name: value})
+                yield from _collect_unaggregated_labels(
+                    child, label_context | {name: value}
+                )
         case LeftsNode():
             for child in node.children:
                 yield from _collect_unaggregated_labels(child, label_context)
