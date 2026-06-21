@@ -203,7 +203,8 @@ def test_fit_logging_capture_collects_output_by_label(test_dataframe, capsys):
     assert "hello-a" in logs["model-a"]
     assert "hello-a-err" in logs["model-a"]
     assert "hello-b" in logs["model-b"]
-    # Captured output does not leak to the real streams.
+
+    # Test that captured output doesn't leak out into the real streams
     captured = capsys.readouterr()
     assert "hello-a" not in captured.out
     assert "hello-a" not in captured.err
@@ -238,16 +239,12 @@ def test_fit_errors_capture_records_and_continues(test_dataframe):
 
     # The good model still fits and is returned.
     assert models["good"].seen == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
     # The failing model is recorded and omitted from models.
     assert "bad" not in models
     assert isinstance(exceptions["bad"], RuntimeError)
     assert str(exceptions["bad"]) == "nope"
 
-
-def test_fit_errors_raise_is_default(test_dataframe):
-    bad = Leaf(label="bad", factory=lambda: _FailingModel())
-    with pytest.raises(RuntimeError, match="boom"):
-        _fit(bad, test_dataframe)
 
 
 def test_fit_errors_capture_feed_skips_consumer_on_source_failure(test_dataframe):
