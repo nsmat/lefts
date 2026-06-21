@@ -40,7 +40,7 @@ class _FailingModel:
 
 
 def test_fit_lift_fans_out(lift_x, test_dataframe):
-    models, _ = _fit(lift_x, test_dataframe)
+    models, *_ = _fit(lift_x, test_dataframe)
     assert models["model-x[category=a]"].seen == [1, 2, 3]
     assert models["model-x[category=b]"].seen == [4, 5, 6]
     assert models["model-x[category=c]"].seen == [7, 8, 9]
@@ -56,7 +56,7 @@ def test_fit_split_applies_train_filter(model_x, test_dataframe):
         train_filter=pl.col("x") < 5,
         test_filter=pl.lit(True),
     )
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
     assert models["model-x"].seen == [1, 2, 3, 4]
 
 
@@ -69,7 +69,7 @@ def test_fit_split_validation_passthrough(test_dataframe):
         test_filter=pl.col("x") >= 8,
         validation_filter=pl.col("x").is_between(5, 7, closed="both"),
     )
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
     assert models["m"].seen == [1, 2, 3, 4]
     assert models["m"].val_seen == [5, 6, 7]
 
@@ -89,7 +89,7 @@ def test_fit_split_inside_lift(model_x, test_dataframe):
         train_filter=lambda v: pl.col("category") == pl.lit(v),
         test_filter=lambda v: pl.col("category") == pl.lit(v),
     )
-    models, _ = _fit(outer, test_dataframe)
+    models, *_ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
     # Train filters resolve to category==a (1, 2, 3) AND x>1, implies x in [2, 3]
     assert models["model-x[category=a]"].seen == [2, 3]
@@ -110,7 +110,7 @@ def test_fit_lift_inside_split(model_x, test_dataframe):
         train_filter=pl.col("x") > 1,
         test_filter=pl.lit(True),
     )
-    models, _ = _fit(outer, test_dataframe)
+    models, *_ = _fit(outer, test_dataframe)
     assert set(models.keys()) == {"model-x[category=a]"}
     # train: x>1 AND category=a → x in [2, 3]
     assert models["model-x[category=a]"].seen == [2, 3]
@@ -125,7 +125,7 @@ def test_fit_feed_basic(test_dataframe):
         label="consumer", factory=lambda: ConsumerModel(source_col="source")
     )
     node = Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
 
     expected_source_training = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert models["source"].seen == expected_source_training
@@ -164,7 +164,7 @@ def test_fit_tune_threads_hyperparameters(test_dataframe):
         source=source_leaf,
         logic=_mean_of_source_training_data,
     )
-    models, hyperparameters = _fit(node, test_dataframe)
+    models, hyperparameters, *_ = _fit(node, test_dataframe)
 
     # source's training data is the full x column
     assert models["source"].seen == [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -181,7 +181,7 @@ def test_fit_ensemble_fits_each_child(test_dataframe):
     a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
     b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
     node = Ensemble(name="ens", models=[a, b])
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
 
     expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert models["model-a"].seen == expected
@@ -198,8 +198,7 @@ def _noisy_ensemble():
 
 
 def test_fit_logging_capture_collects_output_by_label(test_dataframe, capsys):
-    logs = {}
-    _fit(_noisy_ensemble(), test_dataframe, logging="capture", logs=logs)
+    _, _, logs, _ = _fit(_noisy_ensemble(), test_dataframe, logging="capture")
 
     assert "hello-a" in logs["model-a"]
     assert "hello-a-err" in logs["model-a"]
@@ -211,8 +210,7 @@ def test_fit_logging_capture_collects_output_by_label(test_dataframe, capsys):
 
 
 def test_fit_logging_drop_suppresses_output(test_dataframe, capsys):
-    logs = {}
-    _fit(_noisy_ensemble(), test_dataframe, logging="drop", logs=logs)
+    _, _, logs, _ = _fit(_noisy_ensemble(), test_dataframe, logging="drop")
 
     assert logs == {}
     captured = capsys.readouterr()
@@ -236,8 +234,7 @@ def test_fit_errors_capture_records_and_continues(test_dataframe):
     bad = Leaf(label="bad", factory=lambda: _FailingModel(error_message="nope"))
     node = Ensemble(name="ens", models=[good, bad])
 
-    exceptions = {}
-    models, _ = _fit(node, test_dataframe, errors="capture", exceptions=exceptions)
+    models, _, _, exceptions = _fit(node, test_dataframe, errors="capture")
 
     # The good model still fits and is returned.
     assert models["good"].seen == [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -260,8 +257,7 @@ def test_fit_errors_capture_feed_skips_consumer_on_source_failure(test_dataframe
     )
     node = Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
 
-    exceptions = {}
-    models, _ = _fit(node, test_dataframe, errors="capture", exceptions=exceptions)
+    models, _, _, exceptions = _fit(node, test_dataframe, errors="capture")
 
     assert "consumer" not in models
     assert isinstance(exceptions["source"], RuntimeError)
@@ -280,8 +276,7 @@ def test_fit_errors_capture_tune_skips_consumer_on_source_failure(test_dataframe
         logic=_mean_of_source_training_data,
     )
 
-    exceptions = {}
-    models, _ = _fit(node, test_dataframe, errors="capture", exceptions=exceptions)
+    models, _, _, exceptions = _fit(node, test_dataframe, errors="capture")
 
     assert "consumer" not in models
     assert isinstance(exceptions["source"], RuntimeError)

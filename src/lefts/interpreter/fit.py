@@ -47,18 +47,18 @@ def _fit(
     precomputed_masks: dict = None,
     logging: FitLogging = "print",
     errors: FitErrors = "raise",
-    logs: dict = None,
-    exceptions: dict = None,
-) -> Tuple[dict[str, Any], dict[str, Any]]:
+) -> Tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
 
     label_context = label_context or dict()
     hyperparameters = hyperparameters or dict()
-    logs = logs if logs is not None else dict()
-    exceptions = exceptions if exceptions is not None else dict()
 
-    # Define output types
+    # Each recursive call of _fit on a subtree will
+    # return these dictionaries, which will then be merged
+    # back to the corresponding full-tree dictionaries
     fitted_models: dict[str, Any] = {}
     output_hyperparameters: dict[str, Any] = {}
+    logs: dict[str, Any] = {}
+    exceptions: dict[str, Any] = {}
 
     if is_root:
         _check_literal(logging, FitLogging, "logging")
@@ -130,7 +130,7 @@ def _fit(
             for value in values:
                 extended_label_context = {**label_context, name: value}
 
-                child_models, child_hyperparameters = _fit(
+                child_models, child_hyperparameters, child_logs, child_exceptions = _fit(
                     child,
                     df,
                     hyperparameters,
@@ -139,15 +139,15 @@ def _fit(
                     precomputed_masks,
                     logging=logging,
                     errors=errors,
-                    logs=logs,
-                    exceptions=exceptions,
                 )
 
                 fitted_models |= child_models
                 output_hyperparameters |= child_hyperparameters
+                logs |= child_logs
+                exceptions |= child_exceptions
 
         case Split(child=child):
-            child_models, child_hyperparameters = _fit(
+            child_models, child_hyperparameters, child_logs, child_exceptions = _fit(
                 child,
                 df,
                 hyperparameters,
@@ -156,15 +156,15 @@ def _fit(
                 precomputed_masks,
                 logging=logging,
                 errors=errors,
-                logs=logs,
-                exceptions=exceptions,
             )
             fitted_models |= child_models
             output_hyperparameters |= child_hyperparameters
+            logs |= child_logs
+            exceptions |= child_exceptions
 
         case Ensemble():
             for child in node.children:
-                child_fitted_models, child_learned_hyperparameters = _fit(
+                child_models, child_hyperparameters, child_logs, child_exceptions = _fit(
                     child,
                     df,
                     hyperparameters,
@@ -173,33 +173,33 @@ def _fit(
                     precomputed_masks,
                     logging=logging,
                     errors=errors,
-                    logs=logs,
-                    exceptions=exceptions,
                 )
-                fitted_models |= child_fitted_models
-                output_hyperparameters |= child_learned_hyperparameters
+                fitted_models |= child_models
+                output_hyperparameters |= child_hyperparameters
+                logs |= child_logs
+                exceptions |= child_exceptions
 
         case Tune(consumer=consumer, source=source, logic=logic):
-            source_models, learned_hyperparameters = _fit(
+            source_models, learned_hyperparameters, source_logs, source_exceptions = _fit(
                 source,
                 df,
                 logging=logging,
                 errors=errors,
-                logs=logs,
-                exceptions=exceptions,
             )
+            logs |= source_logs
+            exceptions |= source_exceptions
 
-            if errors == "capture" and _failed_in_subtree(source, {}, exceptions):
+            if errors == "capture" and _failed_in_subtree(source, {}, source_exceptions):
                 exceptions[node.name] = UpstreamFitFailure(
                     f"Tune '{node.name}' consumer skipped: source models failed to fit "
-                    f"({sorted(_failed_in_subtree(source, {}, exceptions))})"
+                    f"({sorted(_failed_in_subtree(source, {}, source_exceptions))})"
                 )
                 fitted_models |= source_models
             else:
                 tune_model = _Model(source, source_models, learned_hyperparameters)
                 learned_hyperparameters |= logic(tune_model, df)
 
-                consumer_models, consumer_hyperparameters = _fit(
+                consumer_models, consumer_hyperparameters, consumer_logs, consumer_exceptions = _fit(
                     consumer,
                     df,
                     learned_hyperparameters,
@@ -208,20 +208,17 @@ def _fit(
                     precomputed_masks,
                     logging=logging,
                     errors=errors,
-                    logs=logs,
-                    exceptions=exceptions,
                 )
-
                 fitted_models |= source_models | consumer_models
-                output_hyperparameters |= (
-                    consumer_hyperparameters | learned_hyperparameters
-                )
+                output_hyperparameters |= consumer_hyperparameters | learned_hyperparameters
+                logs |= consumer_logs
+                exceptions |= consumer_exceptions
 
         case Feed(source=source, consumer=consumer):
             _check_feed_row_compatibility(
                 source, consumer, df, precomputed_masks, label_context
             )
-            source_models, source_hyperparameters = _fit(
+            source_models, source_hyperparameters, source_logs, source_exceptions = _fit(
                 source,
                 df,
                 hyperparameters,
@@ -230,16 +227,16 @@ def _fit(
                 precomputed_masks,
                 logging=logging,
                 errors=errors,
-                logs=logs,
-                exceptions=exceptions,
             )
+            logs |= source_logs
+            exceptions |= source_exceptions
 
             if errors == "capture" and _failed_in_subtree(
-                source, label_context, exceptions
+                source, label_context, source_exceptions
             ):
                 exceptions[node.name] = UpstreamFitFailure(
                     f"Feed '{node.name}' consumer skipped: source models failed to fit "
-                    f"({sorted(_failed_in_subtree(source, label_context, exceptions))})"
+                    f"({sorted(_failed_in_subtree(source, label_context, source_exceptions))})"
                 )
                 fitted_models |= source_models
                 output_hyperparameters |= source_hyperparameters
@@ -251,7 +248,7 @@ def _fit(
                     precomputed_masks,
                     label_context,
                 )
-                consumer_models, consumer_hyperparameters = _fit(
+                consumer_models, consumer_hyperparameters, consumer_logs, consumer_exceptions = _fit(
                     consumer,
                     augmented_df,
                     hyperparameters,
@@ -260,18 +257,16 @@ def _fit(
                     precomputed_masks,
                     logging=logging,
                     errors=errors,
-                    logs=logs,
-                    exceptions=exceptions,
                 )
                 fitted_models |= source_models | consumer_models
-                output_hyperparameters |= (
-                    source_hyperparameters | consumer_hyperparameters
-                )
+                output_hyperparameters |= source_hyperparameters | consumer_hyperparameters
+                logs |= consumer_logs
+                exceptions |= consumer_exceptions
 
         case _:
             raise ValueError(f"Unknown node type {type(node)}")
 
-    return fitted_models, output_hyperparameters
+    return fitted_models, output_hyperparameters, logs, exceptions
 
 
 def _check_feed_row_compatibility(

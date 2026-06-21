@@ -41,14 +41,11 @@ class Model(_Model):
                 and continues fitting the remaining models.
         """
 
-        logs, exceptions = {}, {}
-        models, hyperparameters = _fit(
+        models, hyperparameters, logs, exceptions = _fit(
             self.root,
             df,
             logging=logging,
             errors=errors,
-            logs=logs,
-            exceptions=exceptions,
         )
         self.models = models
         self.hyperparameters = hyperparameters

@@ -12,7 +12,7 @@ from conftest import MockModel, ConsumerModel
 
 
 def test_predict_lift_per_value_columns(lift_x, test_dataframe):
-    models, _ = _fit(lift_x, test_dataframe)
+    models, *_ = _fit(lift_x, test_dataframe)
     predictions = _predict(lift_x, models, test_dataframe)
 
     # All rows within a category have identical prediction columns, so we can
@@ -54,7 +54,7 @@ def test_predict_split_applies_test_filter(model_x, test_dataframe):
         train_filter=pl.col("x") < 5,
         test_filter=pl.col("x") >= 5,
     )
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
     # We add a column that says whether the row was in the test set
@@ -84,7 +84,7 @@ def test_predict_ensemble_separate_columns(test_dataframe):
     a = Leaf(label="model-a", factory=lambda: MockModel(x_column="x"))
     b = Leaf(label="model-b", factory=lambda: MockModel(x_column="x"))
     ensemble = Ensemble(name="ens", models=[a, b])
-    models, _ = _fit(ensemble, test_dataframe)
+    models, *_ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
 
     distinct = predictions.select("model-a", "model-b").unique()
@@ -110,7 +110,7 @@ def test_predict_ensemble_aggregate_collapses(test_dataframe):
         models=[a, b],
         aggregate_with=pl.sum_horizontal,
     )
-    models, _ = _fit(ensemble, test_dataframe)
+    models, *_ = _fit(ensemble, test_dataframe)
     predictions = _predict(ensemble, models, test_dataframe)
 
     assert "model-a" not in predictions.columns
@@ -138,7 +138,7 @@ def test_predict_ensemble_nested_aggregates(test_dataframe):
         name="outer", models=[inner, outer_c], aggregate_with=pl.sum_horizontal
     )
 
-    models, _ = _fit(outer, test_dataframe)
+    models, *_ = _fit(outer, test_dataframe)
     predictions = _predict(outer, models, test_dataframe)
 
     for intermediate in ("inner", "inner-a", "inner-b", "outer-c"):
@@ -161,7 +161,7 @@ def test_predict_feed_source_then_consumer(test_dataframe):
         label="consumer", factory=lambda: ConsumerModel(source_col="source")
     )
     node = Feed(name="test_feed", source=source_leaf, consumer=consumer_leaf)
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
     distinct = predictions.select("source", "consumer").unique()
@@ -207,7 +207,7 @@ def test_predict_tune(test_dataframe):
         source=source_leaf,
         logic=_mean_of_source_training_data,
     )
-    models, _ = _fit(node, test_dataframe)
+    models, *_ = _fit(node, test_dataframe)
     predictions = _predict(node, models, test_dataframe)
 
     distinct = predictions.select("source", "consumer").unique()
