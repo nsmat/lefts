@@ -19,7 +19,19 @@ class _Model:
     logs: Optional[dict] = None
     exceptions: Optional[dict] = None
 
-    def predict(self, df: DataFrame, errors: str = "raise"):
+    def predict(self, df: DataFrame, errors: PredictErrors = "raise") -> DataFrame:
+        """
+        Run predict for every fitted leaf model in the tree.
+
+        Parameters
+        ----------
+        errors
+            Determines how leaf models that were not fitted (e.g. because fit was called
+            with errors='capture' and they raised) are handled during predict:
+                - raise: raises a RuntimeError if any model is missing from self.models.
+                - skip_unfit_models: silently omits the output column for any unfit model.
+                - output_nan: adds the output column but fills it entirely with null.
+        """
         return _predict(self.root, self.models, df, errors=errors)
 
     def fit(self, df: DataFrame):
