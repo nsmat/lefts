@@ -10,14 +10,11 @@ def _make_label(leaf_name: str, label_context: dict) -> str:
     return f"{leaf_name}[{dims}]"
 
 
-# Lists longer than this are abbreviated to [first, ..., last] unless the
-# caller asks for the full listing.
-_MAX_LIST = 6
 
 
 def _format_list(items, print_all_labels: bool) -> str:
     items = list(items)
-    if print_all_labels or len(items) <= _MAX_LIST:
+    if print_all_labels or len(items) <= 6:
         body = ", ".join(str(i) for i in items)
     else:
         body = f"{items[0]}, ..., {items[-1]}"
@@ -43,24 +40,24 @@ def _count_models(node: LeftsNode) -> int:
             return sum(_count_models(child) for child in node.children)
 
 
-def _collect_leaf_labels(
+def _collect_unaggregated_labels(
     node: LeftsNode, label_context: dict | None = None
 ) -> Iterator[str]:
-    """Like _collect_labels but always descends to leaves, ignoring aggregation."""
+    """Collects the full set of labels from the leaves, ignoring aggregation"""
     label_context = label_context or {}
     match node:
         case Leaf(label=label):
             yield _make_label(label, label_context)
         case Lift(child=child, name=name, values=values):
             for value in values:
-                yield from _collect_leaf_labels(child, label_context | {name: value})
+                yield from _collect_unaggregated_labels(child, label_context | {name: value})
         case LeftsNode():
             for child in node.children:
-                yield from _collect_leaf_labels(child, label_context)
+                yield from _collect_unaggregated_labels(child, label_context)
 
 
 def _count_fit_models(node: LeftsNode, label_context: dict, models: dict) -> int:
-    return len(set(_collect_leaf_labels(node, label_context)) & set(models))
+    return len(set(_collect_unaggregated_labels(node, label_context)) & set(models))
 
 
 def _node_header(
