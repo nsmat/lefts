@@ -29,16 +29,6 @@ def _aggregation_suffix(node: LeftsNode) -> str:
     return f'  ⇒ {fn_name} → "{node.name}"'
 
 
-def _count_models(node: LeftsNode) -> int:
-    """How many leaf models this subtree fits."""
-    match node:
-        case Leaf():
-            return 1
-        case Lift(child=child, values=values):
-            return len(values) * _count_models(child)
-        case _:
-            return sum(_count_models(child) for child in node.children)
-
 
 def _collect_unaggregated_labels(
     node: LeftsNode, label_context: dict | None = None
@@ -67,17 +57,16 @@ def _node_header(
     label_context: dict | None = None,
 ) -> str:
     label_context = label_context or {}
-    count = _count_models(node)
+    count = len(list(_collect_unaggregated_labels(node)))
 
+    failed_str = ""
     if models is not None:
         fit_count = _count_fit_models(node, label_context, models)
         failed = count - fit_count
         if failed > 0:
-            model_str = f" ({count} model{'' if count == 1 else 's'}, {failed} failed)"
-        else:
-            model_str = f" ({count} model{'' if count == 1 else 's'})"
-    else:
-        model_str = f" ({count} model{'' if count == 1 else 's'})"
+            failed_str = f", {failed} failed"
+
+    model_str = f" ({count} model{'' if count == 1 else 's'}{failed_str})"
 
     match node:
         case Leaf(label=label):
