@@ -27,6 +27,16 @@ def _aggregation_suffix(node: LeftsNode) -> str:
     return f'  ⇒ {fn_name} → "{node.name}"'
 
 
+def _count_models(node: LeftsNode) -> int:
+    match node:
+        case Leaf():
+            return 1
+        case Lift(child=child, values=values):
+            return len(values) * _count_models(child)
+        case _:
+            return sum(_count_models(child) for child in node.children)
+
+
 def _collect_unaggregated_labels(
     node: LeftsNode, label_context: dict | None = None
 ) -> Iterator[str]:
@@ -54,18 +64,20 @@ def _node_header(
     print_all_labels: bool,
     models: dict | None = None,
     label_context: dict | None = None,
+    show_count: bool = True,
 ) -> str:
     label_context = label_context or {}
-    count = len(list(_collect_unaggregated_labels(node)))
 
-    failed_str = ""
-    if models is not None:
-        fit_count = _count_fit_models(node, label_context, models)
-        failed = count - fit_count
-        if failed > 0:
-            failed_str = f", {failed} failed"
-
-    model_str = f" ({count} model{'' if count == 1 else 's'}{failed_str})"
+    model_str = ""
+    if show_count: # Will be False for all children beneath a Lift
+        count = _count_models(node)
+        failed_str = ""
+        if models is not None:
+            fit_count = _count_fit_models(node, label_context, models)
+            failed = count - fit_count
+            if failed > 0:
+                failed_str = f", {failed} failed"
+        model_str = f" ({count} model{'' if count == 1 else 's'}{failed_str})"
 
     match node:
         case Leaf(label=label):
@@ -93,10 +105,11 @@ def _print_tree(
     is_last: bool = True,
     models: dict | None = None,
     label_context: dict | None = None,
+    show_count: bool = True,
 ) -> str:
     label_context = label_context or {}
     header = _node_header(
-        node, print_all_labels, models=models, label_context=label_context
+        node, print_all_labels, models=models, label_context=label_context, show_count=show_count,
     )
 
     if is_root:
@@ -110,6 +123,7 @@ def _print_tree(
 
     children = list(node.children)
     child_models = None if isinstance(node, Lift) else models
+    child_show_count = not isinstance(node, Lift)
     for i, child in enumerate(children):
         lines.append(
             _print_tree(
@@ -120,6 +134,7 @@ def _print_tree(
                 is_last=(i == len(children) - 1),
                 models=child_models,
                 label_context=label_context,
+                show_count=child_show_count,
             )
         )
 
