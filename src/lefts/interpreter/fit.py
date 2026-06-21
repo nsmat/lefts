@@ -130,15 +130,17 @@ def _fit(
             for value in values:
                 extended_label_context = {**label_context, name: value}
 
-                child_models, child_hyperparameters, child_logs, child_exceptions = _fit(
-                    child,
-                    df,
-                    hyperparameters,
-                    extended_label_context,
-                    False,
-                    precomputed_masks,
-                    logging=logging,
-                    errors=errors,
+                child_models, child_hyperparameters, child_logs, child_exceptions = (
+                    _fit(
+                        child,
+                        df,
+                        hyperparameters,
+                        extended_label_context,
+                        False,
+                        precomputed_masks,
+                        logging=logging,
+                        errors=errors,
+                    )
                 )
 
                 fitted_models |= child_models
@@ -164,15 +166,17 @@ def _fit(
 
         case Ensemble():
             for child in node.children:
-                child_models, child_hyperparameters, child_logs, child_exceptions = _fit(
-                    child,
-                    df,
-                    hyperparameters,
-                    label_context,
-                    False,
-                    precomputed_masks,
-                    logging=logging,
-                    errors=errors,
+                child_models, child_hyperparameters, child_logs, child_exceptions = (
+                    _fit(
+                        child,
+                        df,
+                        hyperparameters,
+                        label_context,
+                        False,
+                        precomputed_masks,
+                        logging=logging,
+                        errors=errors,
+                    )
                 )
                 fitted_models |= child_models
                 output_hyperparameters |= child_hyperparameters
@@ -180,16 +184,20 @@ def _fit(
                 exceptions |= child_exceptions
 
         case Tune(consumer=consumer, source=source, logic=logic):
-            source_models, learned_hyperparameters, source_logs, source_exceptions = _fit(
-                source,
-                df,
-                logging=logging,
-                errors=errors,
+            source_models, learned_hyperparameters, source_logs, source_exceptions = (
+                _fit(
+                    source,
+                    df,
+                    logging=logging,
+                    errors=errors,
+                )
             )
             logs |= source_logs
             exceptions |= source_exceptions
 
-            if errors == "capture" and _failed_in_subtree(source, {}, source_exceptions):
+            if errors == "capture" and _failed_in_subtree(
+                source, {}, source_exceptions
+            ):
                 exceptions[node.name] = UpstreamFitFailure(
                     f"Tune '{node.name}' consumer skipped: source models failed to fit "
                     f"({sorted(_failed_in_subtree(source, {}, source_exceptions))})"
@@ -199,7 +207,12 @@ def _fit(
                 tune_model = _Model(source, source_models, learned_hyperparameters)
                 learned_hyperparameters |= logic(tune_model, df)
 
-                consumer_models, consumer_hyperparameters, consumer_logs, consumer_exceptions = _fit(
+                (
+                    consumer_models,
+                    consumer_hyperparameters,
+                    consumer_logs,
+                    consumer_exceptions,
+                ) = _fit(
                     consumer,
                     df,
                     learned_hyperparameters,
@@ -210,7 +223,9 @@ def _fit(
                     errors=errors,
                 )
                 fitted_models |= source_models | consumer_models
-                output_hyperparameters |= consumer_hyperparameters | learned_hyperparameters
+                output_hyperparameters |= (
+                    consumer_hyperparameters | learned_hyperparameters
+                )
                 logs |= consumer_logs
                 exceptions |= consumer_exceptions
 
@@ -218,15 +233,17 @@ def _fit(
             _check_feed_row_compatibility(
                 source, consumer, df, precomputed_masks, label_context
             )
-            source_models, source_hyperparameters, source_logs, source_exceptions = _fit(
-                source,
-                df,
-                hyperparameters,
-                label_context,
-                False,
-                precomputed_masks,
-                logging=logging,
-                errors=errors,
+            source_models, source_hyperparameters, source_logs, source_exceptions = (
+                _fit(
+                    source,
+                    df,
+                    hyperparameters,
+                    label_context,
+                    False,
+                    precomputed_masks,
+                    logging=logging,
+                    errors=errors,
+                )
             )
             logs |= source_logs
             exceptions |= source_exceptions
@@ -248,7 +265,12 @@ def _fit(
                     precomputed_masks,
                     label_context,
                 )
-                consumer_models, consumer_hyperparameters, consumer_logs, consumer_exceptions = _fit(
+                (
+                    consumer_models,
+                    consumer_hyperparameters,
+                    consumer_logs,
+                    consumer_exceptions,
+                ) = _fit(
                     consumer,
                     augmented_df,
                     hyperparameters,
@@ -259,7 +281,9 @@ def _fit(
                     errors=errors,
                 )
                 fitted_models |= source_models | consumer_models
-                output_hyperparameters |= source_hyperparameters | consumer_hyperparameters
+                output_hyperparameters |= (
+                    source_hyperparameters | consumer_hyperparameters
+                )
                 logs |= consumer_logs
                 exceptions |= consumer_exceptions
 

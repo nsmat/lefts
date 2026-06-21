@@ -157,6 +157,3 @@ def test_fit_ensemble_fits_each_child(test_dataframe):
     expected = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert models["model-a"].seen == expected
     assert models["model-b"].seen == expected
-
-
-
