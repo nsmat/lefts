@@ -110,7 +110,9 @@ def _print_tree(
     label_context: dict | None = None,
 ) -> str:
     label_context = label_context or {}
-    header = _node_header(node, print_all_labels, models=models, label_context=label_context)
+    header = _node_header(
+        node, print_all_labels, models=models, label_context=label_context
+    )
 
     if is_root:
         outputs = _format_list(_collect_labels(node), print_all_labels)

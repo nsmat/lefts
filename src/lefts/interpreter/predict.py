@@ -111,7 +111,13 @@ def _predict(
 
         case Split(child=child):
             df = _predict(
-                child, models, df, precomputed_masks, label_context, is_root=False, errors=errors
+                child,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+                errors=errors,
             )
 
         case Ensemble(aggregate_with=aggregation_function):
@@ -130,10 +136,22 @@ def _predict(
 
         case Feed(source=source, consumer=consumer):
             df = _predict(
-                source, models, df, precomputed_masks, label_context, is_root=False, errors=errors
+                source,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+                errors=errors,
             )
             df = _predict(
-                consumer, models, df, precomputed_masks, label_context, is_root=False, errors=errors
+                consumer,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+                errors=errors,
             )
 
         case Tune(consumer=consumer, source=source):

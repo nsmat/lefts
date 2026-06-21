@@ -82,7 +82,11 @@ class Model(_Model):
         return super().predict(df, errors=errors)
 
     def print_tree(self, print_all_labels: bool = False):
-        print(_print_tree(self.root, print_all_labels=print_all_labels, models=self.models))
+        print(
+            _print_tree(
+                self.root, print_all_labels=print_all_labels, models=self.models
+            )
+        )
 
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
