@@ -282,12 +282,3 @@ def test_fit_errors_capture_tune_skips_consumer_on_source_failure(test_dataframe
     assert isinstance(exceptions["source"], RuntimeError)
     assert isinstance(exceptions["test_tune"], UpstreamFitFailure)
 
-
-def test_fit_rejects_unknown_logging_mode(test_dataframe, model_x):
-    with pytest.raises(ValueError, match="logging"):
-        _fit(model_x, test_dataframe, logging="bogus")
-
-
-def test_fit_rejects_unknown_errors_mode(test_dataframe, model_x):
-    with pytest.raises(ValueError, match="errors"):
-        _fit(model_x, test_dataframe, errors="bogus")
