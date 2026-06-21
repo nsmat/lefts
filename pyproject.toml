@@ -27,6 +27,8 @@ dev  = [
     "jupyter",
     "jupyterlab",
     "nbstripout",
+    "mkdocs-material",
+    "mkdocstrings[python]",
 ]
 
 [build-system]

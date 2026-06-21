@@ -1,0 +1,60 @@
+site_name: Lefts
+site_description: Composable transformations for ML model experimentation
+repo_url: https://github.com/nsmat/lefts
+repo_name: nsmat/lefts
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Commands:
+    - Overview: commands/index.md
+    - Leaf: commands/leaf.md
+    - Lift: commands/lift.md
+    - Ensemble: commands/ensemble.md
+    - Tune: commands/tune.md
+    - Feed: commands/feed.md
+    - Split: commands/split.md
+  - API Reference:
+    - Commands: api/commands.md
+    - Model: api/model.md
+    - Helpers: api/helpers.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
