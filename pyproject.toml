@@ -3,6 +3,7 @@ name = "lefts"
 license = "Apache-2.0"
 version = "0.1.0"
 description = "Composable transformations for model experimentation"
+readme = "README.md"
 authors = [
     { name = "Niklas Mather", email = "niksmather@gmail.com" }
 ]
@@ -10,6 +11,10 @@ requires-python = ">=3.10"
 dependencies = [
     "polars",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nsmat/lefts"
+Repository = "https://github.com/nsmat/lefts"
 
 [tool.ruff.lint]
 ignore = ["E731"] # Allows the use of lambdas as variables

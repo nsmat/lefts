@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
+from .params import PredictErrors, _check_literal
+
+import polars as pl
 from polars import DataFrame, Series
 
 from ..nodes import LeftsNode, Leaf, Lift, Split, Ensemble, Tune, Feed
@@ -13,9 +16,23 @@ class _Model:
     root: LeftsNode
     models: Optional[dict] = None
     hyperparameters: Optional[dict] = None
+    logs: Optional[dict] = None
+    exceptions: Optional[dict] = None
 
-    def predict(self, df: DataFrame):
-        return _predict(self.root, self.models, df)
+    def predict(self, df: DataFrame, errors: PredictErrors = "raise") -> DataFrame:
+        """
+        Run predict for every fitted leaf model in the tree.
+
+        Parameters
+        ----------
+        errors
+            Determines how leaf models that were not fitted (e.g. because fit was called
+            with errors='capture' and they raised) are handled during predict:
+                - raise: raises a RuntimeError if any model is missing from self.models.
+                - skip_unfit_models: silently omits the output column for any unfit model.
+                - output_nan: adds the output column but fills it entirely with null.
+        """
+        return _predict(self.root, self.models, df, errors=errors)
 
     def fit(self, df: DataFrame):
         raise NotImplementedError()
@@ -47,11 +64,13 @@ def _predict(
     precomputed_masks: dict | None = None,
     label_context: dict | None = None,
     is_root: bool = True,
+    errors: PredictErrors = "raise",
 ) -> DataFrame:
 
     label_context = label_context or {}
 
     if is_root:
+        _check_literal(errors, PredictErrors, "errors")
         if "__lefts_row_index" in df.columns:
             raise ValueError(
                 "Trying to create column __lefts_row_index but it already exists"
@@ -63,17 +82,32 @@ def _predict(
     match node:
         case Leaf(label=label):
             full_label = _make_label(label, label_context)
-            test_mask = precomputed_masks[full_label]["test"]
-            test_df = df.filter(test_mask)
-            predictions = models[full_label].predict(test_df)
-            predictions = Series(name=full_label, values=predictions)
-            test_df = test_df.with_columns(predictions)
-            df = df.join(
-                test_df.select("__lefts_row_index", full_label),
-                on="__lefts_row_index",
-                coalesce=True,
-                how="left",
-            )
+
+            if full_label not in models:
+                match errors:
+                    case "raise":
+                        raise RuntimeError(
+                            f"Model {full_label!r} was not fit. Call .fit() before .predict(), "
+                            "or use errors='skip_unfit_models' / errors='output_nan'."
+                        )
+                    case "output_nan":
+                        df = df.with_columns(pl.lit(None).alias(full_label))
+                    case "skip_unfit_models":
+                        pass
+                    case _:
+                        raise ValueError(f"Unhandled errors value {errors!r}")
+            else:
+                test_mask = precomputed_masks[full_label]["test"]
+                test_df = df.filter(test_mask)
+                predictions = models[full_label].predict(test_df)
+                predictions = Series(name=full_label, values=predictions)
+                test_df = test_df.with_columns(predictions)
+                df = df.join(
+                    test_df.select("__lefts_row_index", full_label),
+                    on="__lefts_row_index",
+                    coalesce=True,
+                    how="left",
+                )
 
         case Lift(
             child=child, name=name, values=values, aggregate_with=aggregation_function
@@ -86,13 +120,20 @@ def _predict(
                     precomputed_masks,
                     label_context | {name: value},
                     is_root=False,
+                    errors=errors,
                 )
             if aggregation_function is not None:
                 df = _aggregate(node, df, label_context)
 
         case Split(child=child):
             df = _predict(
-                child, models, df, precomputed_masks, label_context, is_root=False
+                child,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+                errors=errors,
             )
 
         case Ensemble(aggregate_with=aggregation_function):
@@ -104,16 +145,29 @@ def _predict(
                     precomputed_masks,
                     label_context,
                     is_root=False,
+                    errors=errors,
                 )
             if aggregation_function is not None:
                 df = _aggregate(node, df, label_context)
 
         case Feed(source=source, consumer=consumer):
             df = _predict(
-                source, models, df, precomputed_masks, label_context, is_root=False
+                source,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+                errors=errors,
             )
             df = _predict(
-                consumer, models, df, precomputed_masks, label_context, is_root=False
+                consumer,
+                models,
+                df,
+                precomputed_masks,
+                label_context,
+                is_root=False,
+                errors=errors,
             )
 
         case Tune(consumer=consumer, source=source):
@@ -124,6 +178,7 @@ def _predict(
                 precomputed_masks,
                 label_context,
                 is_root=False,
+                errors=errors,
             )
             df = _predict(
                 consumer,
@@ -132,6 +187,7 @@ def _predict(
                 precomputed_masks,
                 label_context,
                 is_root=False,
+                errors=errors,
             )
 
     if is_root:

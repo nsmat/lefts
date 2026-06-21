@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
@@ -7,6 +8,7 @@ from .interpreter.fit import _fit
 from .interpreter.predict import _Model
 from .interpreter.masks import _collect_masks
 from .interpreter.labels import _print_tree, _collect_labels
+from .interpreter.params import FitLogging, FitErrors
 from .nodes import Ensemble, Feed, Leaf, Tune, Lift, Split
 from .validation import _validate
 
@@ -16,13 +18,53 @@ class Model(_Model):
     def __post_init__(self):
         _validate(self.root)
 
-    def fit(self, df: DataFrame):
-        models, hyperparameters = _fit(self.root, df)
+    def fit(
+        self,
+        df: DataFrame,
+        logging: FitLogging = "capture",
+        errors: FitErrors = "raise",
+    ):
+        """
+        Fit every leaf model in the tree.
+
+        Parameters
+        ----------
+        logging
+            Determines how we handle each leaf model's stdout/stderr during fit:
+                - print: stdout/stderr from each model will behave as normal
+                - drop: stdout/stderr from all models will be dropped.
+                - capture: collects it into self.logs keyed by model label.
+        errors
+            Determines how we handle exceptions that raise during fit:
+             - raise: an error in the fit of any leaf halts the fit call
+             - capture: records the exception in self.exceptions, keyed by model label,
+                and continues fitting the remaining models.
+        """
+
+        models, hyperparameters, logs, exceptions = _fit(
+            self.root,
+            df,
+            logging=logging,
+            errors=errors,
+        )
         self.models = models
         self.hyperparameters = hyperparameters
+        self.logs = logs
+        self.exceptions = exceptions
+
+        if exceptions:
+            warnings.warn(
+                f"{len(exceptions)} model(s) failed to train: {sorted(exceptions)}",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def print_tree(self, print_all_labels: bool = False):
-        print(_print_tree(self.root, print_all_labels=print_all_labels))
+        print(
+            _print_tree(
+                self.root, print_all_labels=print_all_labels, models=self.models
+            )
+        )
 
     def collect_labels(self) -> Iterable[str]:
         return _collect_labels(self.root)
