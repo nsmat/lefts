@@ -8,7 +8,7 @@ from .interpreter.fit import _fit
 from .interpreter.predict import _Model
 from .interpreter.masks import _collect_masks
 from .interpreter.labels import _print_tree, _collect_labels
-from .interpreter.params import FitLogging, FitErrors, PredictErrors
+from .interpreter.params import FitLogging, FitErrors
 from .nodes import Ensemble, Feed, Leaf, Tune, Lift, Split
 from .validation import _validate
 
@@ -58,7 +58,6 @@ class Model(_Model):
                 UserWarning,
                 stacklevel=2,
             )
-
 
     def print_tree(self, print_all_labels: bool = False):
         print(

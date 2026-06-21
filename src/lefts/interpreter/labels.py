@@ -69,7 +69,7 @@ def _node_header(
     label_context = label_context or {}
 
     model_str = ""
-    if show_count: # Will be False for all children beneath a Lift
+    if show_count:  # Will be False for all children beneath a Lift
         count = _count_models(node)
         failed_str = ""
         if models is not None:
@@ -109,7 +109,11 @@ def _print_tree(
 ) -> str:
     label_context = label_context or {}
     header = _node_header(
-        node, print_all_labels, models=models, label_context=label_context, show_count=show_count,
+        node,
+        print_all_labels,
+        models=models,
+        label_context=label_context,
+        show_count=show_count,
     )
 
     if is_root:
