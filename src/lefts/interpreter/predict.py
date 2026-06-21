@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
+from .params import PredictErrors, _check_literal
+
 import polars as pl
 from polars import DataFrame, Series
 
@@ -50,16 +52,13 @@ def _predict(
     precomputed_masks: dict | None = None,
     label_context: dict | None = None,
     is_root: bool = True,
-    errors: str = "raise",
+    errors: PredictErrors = "raise",
 ) -> DataFrame:
 
     label_context = label_context or {}
 
     if is_root:
-        if errors not in {"raise", "skip_unfit_models", "output_nan"}:
-            raise ValueError(
-                f"errors must be one of 'raise', 'skip_unfit_models', 'output_nan', got {errors!r}"
-            )
+        _check_literal(errors, PredictErrors, "errors")
         if "__lefts_row_index" in df.columns:
             raise ValueError(
                 "Trying to create column __lefts_row_index but it already exists"

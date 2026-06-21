@@ -6,6 +6,7 @@ from ..nodes import LeftsNode, Leaf, Lift, Split, Ensemble, Tune, Feed
 from .labels import _make_label
 from .masks import _collect_masks
 from .predict import _Model, _predict
+from .params import FitLogging, FitErrors, _check_literal
 from typing import Tuple, Any
 from polars import DataFrame, Expr, lit
 from inspect import signature
@@ -44,8 +45,8 @@ def _fit(
     label_context: dict = None,
     is_root=True,
     precomputed_masks: dict = None,
-    logging: str = "print",
-    errors: str = "raise",
+    logging: FitLogging = "print",
+    errors: FitErrors = "raise",
     logs: dict = None,
     exceptions: dict = None,
 ) -> Tuple[dict[str, Any], dict[str, Any]]:
@@ -60,14 +61,8 @@ def _fit(
     output_hyperparameters: dict[str, Any] = {}
 
     if is_root:
-        if logging not in {"capture", "drop", "print"}:
-            raise ValueError(
-                f"logging must be one of 'capture', 'drop', 'print', got {logging!r}"
-            )
-        if errors not in {"capture", "raise"}:
-            raise ValueError(
-                f"errors must be one of 'capture', 'raise', got {errors!r}"
-            )
+        _check_literal(logging, FitLogging, "logging")
+        _check_literal(errors, FitErrors, "errors")
         precomputed_masks = _collect_masks(node)
 
     match node:
