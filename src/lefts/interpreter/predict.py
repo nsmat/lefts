@@ -72,14 +72,18 @@ def _predict(
             full_label = _make_label(label, label_context)
 
             if full_label not in models:
-                if errors == "raise":
-                    raise RuntimeError(
-                        f"Model {full_label!r} was not fit. Call .fit() before .predict(), "
-                        "or use errors='skip_unfit_models' / errors='output_nan'."
-                    )
-                elif errors == "output_nan":
-                    df = df.with_columns(pl.lit(None).alias(full_label))
-                # skip_unfit_models: add nothing
+                match errors:
+                    case "raise":
+                        raise RuntimeError(
+                            f"Model {full_label!r} was not fit. Call .fit() before .predict(), "
+                            "or use errors='skip_unfit_models' / errors='output_nan'."
+                        )
+                    case "output_nan":
+                        df = df.with_columns(pl.lit(None).alias(full_label))
+                    case "skip_unfit_models":
+                        pass
+                    case _:
+                        raise ValueError(f"Unhandled errors value {errors!r}")
             else:
                 test_mask = precomputed_masks[full_label]["test"]
                 test_df = df.filter(test_mask)
