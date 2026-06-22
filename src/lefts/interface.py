@@ -41,13 +41,13 @@ class Model(_Model):
                 and continues fitting the remaining models.
         """
 
-        models, hyperparameters, logs, exceptions = _fit(
+        fitted, hyperparameters, logs, exceptions = _fit(
             self.root,
             df,
             logging=logging,
             errors=errors,
         )
-        self.models = models
+        self.fitted = fitted
         self.hyperparameters = hyperparameters
         self.logs = logs
         self.exceptions = exceptions
@@ -62,7 +62,7 @@ class Model(_Model):
     def print_tree(self, print_all_labels: bool = False):
         print(
             _print_tree(
-                self.root, print_all_labels=print_all_labels, models=self.models
+                self.root, print_all_labels=print_all_labels, models=self.fitted
             )
         )
 

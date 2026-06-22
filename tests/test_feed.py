@@ -37,7 +37,7 @@ def test_split_above_feed_no_leakage(test_dataframe):
         model.fit(test_dataframe)
 
     # Source's training data is exactly the Split's train rows; nothing leaked in.
-    assert model.models["src"].seen == [1, 2, 3, 4]
+    assert model.fitted["src"].seen == [1, 2, 3, 4]
 
     predictions = model.predict(test_dataframe)
     distinct = (
@@ -147,14 +147,14 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     data_excluding_fold_1 = [1, 2, 3, 7, 8, 9]
     data_excluding_fold_2 = [1, 2, 3, 4, 5, 6]
 
-    assert model.models["teacher[cv_teacher=0]"].seen == data_excluding_fold_0
-    assert model.models["teacher[cv_teacher=1]"].seen == data_excluding_fold_1
-    assert model.models["teacher[cv_teacher=2]"].seen == data_excluding_fold_2
+    assert model.fitted["teacher[cv_teacher=0]"].seen == data_excluding_fold_0
+    assert model.fitted["teacher[cv_teacher=1]"].seen == data_excluding_fold_1
+    assert model.fitted["teacher[cv_teacher=2]"].seen == data_excluding_fold_2
 
     # The student will see the predictions of the teacher - recall that the teacher
     # Just stores all the training data it saw. Hence, we expect that on each fold i
     # The student will be passed all the data from fold != i by the teacher.
-    assert model.models["student[cv_student=0]"].seen == [
+    assert model.fitted["student[cv_student=0]"].seen == [
         data_excluding_fold_1,
         data_excluding_fold_2,
     ]

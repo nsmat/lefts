@@ -14,7 +14,7 @@ from .masks import _collect_masks
 @dataclass
 class _Model:
     root: LeftsNode
-    models: Optional[dict] = None
+    fitted: Optional[dict] = None
     hyperparameters: Optional[dict] = None
     logs: Optional[dict] = None
     exceptions: Optional[dict] = None
@@ -32,7 +32,7 @@ class _Model:
                 - skip_unfit_models: silently omits the output column for any unfit model.
                 - output_nan: adds the output column but fills it entirely with null.
         """
-        return _predict(self.root, self.models, df, errors=errors)
+        return _predict(self.root, self.fitted, df, errors=errors)
 
     def fit(self, df: DataFrame):
         raise NotImplementedError()
