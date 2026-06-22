@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterator, Optional
+from typing import Iterator, Literal, Optional
 
 from .params import PredictErrors, _check_literal
 
@@ -19,7 +19,7 @@ class _Model:
     logs: Optional[dict] = None
     exceptions: Optional[dict] = None
 
-    def predict(self, df: DataFrame, errors: PredictErrors = "raise") -> DataFrame:
+    def predict(self, df: DataFrame, errors: Literal["raise", "skip_unfit_models", "output_nan"] = "raise") -> DataFrame:
         """
         Run predict for every fitted leaf model in the tree.
 

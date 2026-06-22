@@ -36,7 +36,7 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
+  - Getting Started: understanding-lefts.md
   - Commands:
     - Overview: commands/index.md
     - Leaf: commands/leaf.md

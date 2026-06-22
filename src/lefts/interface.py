@@ -1,6 +1,6 @@
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 
 from polars import DataFrame, Expr
 
@@ -21,8 +21,8 @@ class Model(_Model):
     def fit(
         self,
         df: DataFrame,
-        logging: FitLogging = "capture",
-        errors: FitErrors = "raise",
+        logging: Literal["capture", "drop", "print"] = "capture",
+        errors: Literal["capture", "raise"] = "raise",
     ):
         """
         Fit every leaf model in the tree.
