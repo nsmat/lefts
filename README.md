@@ -25,16 +25,6 @@ Lefts can operate on any model that is defined by:
 
 A Lefts command creates a new model by transforming these functions into a new .fit and .predict. Because this new model also has a .fit and .predict, it can be transformed with further Lefts commands.
 
-
-### Conventions
-
-Lefts imposes some constraints on model interfaces.
-- All hyperparameters are passed as arguments to the fit method.
-- We expect that data is passed to fit and predict as Polars dataframes.
-- The predict method returns an iterable, with the order of predictions matching the order on the input training data frame.
-
-See the example notebooks to understand how to adapt your models to the required format. To get off the ground quickly, you can use `lefts.helpers.tabular_model` to convert a sklearn style model to the required format. 
-
 # An example
 
 The following code shows lefts can be used to create complex models out of more basic ones. We start with an LGBM Regression model, and train an ensemble of models to predict each quantile. The ensemble is trained in a monthly rolling retrain.

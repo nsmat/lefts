@@ -1,10 +1,4 @@
-from statistics import LinearRegression
-
-# What does Lefts do?
-
-- Introduce the idea that we are going to train big families of estimators.
-
-# The leaf command and lefts Models
+## Lefts Models and the 'leaf' command
 
 Any lefts workflow must start with the leaf command. The first argument of leaf is a constructor of an 'estimator', that is, an object with a .fit and .predict method which operate on polars dataframes.
 
@@ -28,7 +22,7 @@ class LinearRegression:
 ```
 
 Which we would pass to leaf like so:
-```
+```python
 model = leaf(LinearRegression, label='linear_regression')
 ```
 
@@ -38,6 +32,8 @@ leaf returns a lefts Model type, which can be thought of as a set of five functi
 - __predict__: generates predictions on the test rows.
 - __train_filter / test_filter / validation_filter__: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
 - __labels__: which gives you unique labels for every estimator instance we create.
+
+Model also has an attribute 'fitted', which stores the trained estimator instances.
 
 The Model output by 'leaf' will look a lot like the original estimator. Calling model.fit and model.predict will give you the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'linear_regression'.
 
@@ -58,7 +54,7 @@ The transformed model has the same interface, so we can keep applying more lefts
 
 # Lefts commands
 
-### The Split Command
+### Split
 
 Let's illustrate this with the simple command 'split':
 
@@ -124,8 +120,6 @@ comparison.predict(df)
 
 By default each model gets its own output column, named after the model label.
 
-After fitting, each model is 
-
 The 'aggregate_with' parameter takes a function which operates on a set of dataframe columns and returns a single column. For example, you could take the mean of all the models in the ensemble:
 
 ```python
@@ -138,7 +132,7 @@ comparison = ensemble(
 ```
 
 ```
-┌────────────┬────────────┐
+┌────────────┬────────────────────┐
 │ date       ┆ mean(linear+lasso) │
 │ ---        ┆ ---                │
 │ date       ┆ f64                │
@@ -158,7 +152,7 @@ Lift will train multiple copies of a model on different, potentially overlapping
 
 ```python
 dates = [dt.date(2025, 11, 1), dt.date(2025, 12, 1), dt.date(2026, 1, 1)]
-linear_regression = leaf(LinearRegression, label='lr')
+linear_regression = leaf(LinearRegression, label='linear_regression')
 
 rolling = lift(
     linear_regression,
@@ -170,7 +164,7 @@ rolling = lift(
 )
 ```
 
-When fit is called, three separate instances of LinearRegression will be created - one for each of the listed dates. Each one will be trained on data from before that models cut off. When predict is called, each of the models will only be evaluated on the data for the subsequent month.
+When fit is called, three separate instances of LinearRegression will be created - one for each of the listed dates. Each one will be trained on data from before that model's cutoff. When predict is called, each of the models will only be evaluated on the data for the subsequent month.
 
 ```
 ┌────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┐
@@ -194,7 +188,7 @@ Lift is a very powerful operation. It can be used for:
 
 ### Feed
 
-Feed is used when one model relies on the output of the second one for either training or prediction. The 'source' is fitted first, its predictions are added to the dataframe as a new column, and then the consumer is fitted on this augmented dataframe. The same augmentation happens at predict time.
+Feed is used when one model relies on the output of another for either training or prediction. The 'source' is fitted first, its predictions are added to the dataframe as a new column, and then the consumer is fitted on this augmented dataframe. The same augmentation happens at predict time.
 
 ```python
 from functools import partial
@@ -211,7 +205,7 @@ chained = feed('two_stage', source=stage1, consumer=stage2)
 
 Tune is used for when you want to derive model hyperparameters by training and evaluating another model. 
 
-Lefts places a convention around hyperparameters - any modifiable hyperparameters should be arguments in the constructor of the estimator. The free variables that Tune can optimise are the parameters of the estimator __init__
+Lefts places a convention around hyperparameters - any modifiable hyperparameters should be arguments in the constructor of the estimator. The free variables that Tune can optimise are the parameters of the estimator `__init__`.
 
 In the slightly artificial example below, we imagine a linear regression model that allows for a learned offset on top of the prediction. 
 
@@ -243,7 +237,7 @@ def derive_offset(source_model, df):
     return {'offset': bias}
 ```
 
-Then the hyperparameter tuning workflow provided by:
+Then the hyperparameter tuning workflow provided by using Tune:
 
 ```python
 source   = leaf(LinearRegression,           label='source')
@@ -265,8 +259,6 @@ parameterised_model = partial(LinearRegressionWithOffset, **hyperparameters)
 
 consumer = leaf(parameterised_model, label='consumer')
 consumer.fit(df)
-
-
 ```
 
 
