@@ -1,3 +1,5 @@
+from statistics import LinearRegression
+
 # What does Lefts do?
 
 - Introduce the idea that we are going to train big families of estimators.
@@ -122,6 +124,8 @@ comparison.predict(df)
 
 By default each model gets its own output column, named after the model label.
 
+After fitting, each model is 
+
 The 'aggregate_with' parameter takes a function which operates on a set of dataframe columns and returns a single column. For example, you could take the mean of all the models in the ensemble:
 
 ```python
@@ -204,6 +208,68 @@ chained = feed('two_stage', source=stage1, consumer=stage2)
 ```
 
 ### Tune
+
+Tune is used for when you want to derive model hyperparameters by training and evaluating another model. 
+
+Lefts places a convention around hyperparameters - any modifiable hyperparameters should be arguments in the constructor of the estimator. The free variables that Tune can optimise are the parameters of the estimator __init__
+
+In the slightly artificial example below, we imagine a linear regression model that allows for a learned offset on top of the prediction. 
+
+```python
+class LinearRegressionWithOffset:
+    def __init__(self, x='x', y='y', offset=0.0):
+        self.x = x
+        self.y = y
+        self.offset = offset
+        self.slope = None
+        self.intercept = None
+
+    def fit(self, df: pl.DataFrame) -> None:
+        result = scipy.stats.linregress(df[self.x].to_numpy(), df[self.y].to_numpy())
+        self.slope = result.slope
+        self.intercept = result.intercept
+
+    def predict(self, df: pl.DataFrame) -> Iterable:
+        return self.slope * df[self.x].to_numpy() + self.intercept + self.offset
+```
+
+Tune requires that we specify how we will derive the hyperparameter from the source model. This is done by passing a Python function that has access to the trained source_model and the training data. 
+
+```python
+def derive_offset(source_model, df):
+    df = source_model.predict(df)
+    df = df.with_columns(residual=pl.col('source') - pl.col('y'))
+    bias = df['residual'].mean()
+    return {'offset': bias}
+```
+
+Then the hyperparameter tuning workflow provided by:
+
+```python
+source   = leaf(LinearRegression,           label='source')
+consumer = leaf(LinearRegressionWithOffset, label='consumer')
+
+tuned = tune('bias_correction', source=source, consumer=consumer, logic=derive_offset)
+
+tuned.fit(df)
+```
+
+Is roughly equivalent to:
+
+```python
+source.fit(df)
+
+hyperparameters = derive_offset(source, df)
+
+parameterised_model = partial(LinearRegressionWithOffset, **hyperparameters)
+
+consumer = leaf(parameterised_model, label='consumer')
+consumer.fit(df)
+
+
+```
+
+
 
 
 
