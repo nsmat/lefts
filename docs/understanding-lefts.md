@@ -154,8 +154,22 @@ The output column takes the name of the ensemble operation.
 
 ### Lift
 
-- Lift 
+Lift will train multiple copies of a model on different, potentially overlapping subsets of the data. For example, suppose you want to create a 'rolling retrain' workflow, where the same model is retrained every month.
 
+```python
+dates = [dt.date(2025, 11, 1), dt.date(2025, 12, 1), dt.date(2026, 1, 1)]
+linear_regression = leaf(LinearRegression, label='linear_regression')
+
+rolling = lift(
+    linear_regression,
+    name='monthly_retrain',
+    values=dates,
+    train_filter=lambda d: pl.col('date') < d,
+    test_filter=lambda d: pl.col('date').dt.month() == d.month,
+)
+```
+
+We will create a separate 
 
 
 
