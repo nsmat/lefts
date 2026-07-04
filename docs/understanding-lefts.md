@@ -12,8 +12,8 @@ class LinearRegression:
         self.slope = None
         self.intercept = None
 
-    def fit(self, df: pl.DataFrame) -> None:
-        result = scipy.stats.linregress(df[self.x].to_numpy(), df[self.y].to_numpy())
+    def fit(self, training_set: pl.DataFrame) -> None:
+        result = scipy.stats.linregress(training_set[self.x].to_numpy(), training_set[self.y].to_numpy())
         self.slope = result.slope
         self.intercept = result.intercept
 
@@ -27,11 +27,12 @@ model = leaf(LinearRegression, label='linear_regression')
 ```
 
 leaf returns a lefts Model type, which can be thought of as a set of five functions:
-- __fit__: creates estimator instances and optimises their parameters over the train set.
-- __factory__: called by fit to instantiate all the estimators required by the workflow.
-- __predict__: generates predictions on the test rows.
-- __train_filter / test_filter / validation_filter__: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
-- __labels__: which gives you unique labels for every estimator instance we create.
+
+- **fit**: creates estimator instances and optimises their parameters over the train set.
+- **factory**: called by fit to instantiate all the estimators required by the workflow.
+- **predict**: generates predictions on the test rows.
+- **train_filter / test_filter / validation_filter**: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
+- **labels**: which gives you unique labels for every estimator instance we create.
 
 Model also has an attribute 'fitted', which stores the trained estimator instances.
 
@@ -44,11 +45,11 @@ However, as we apply further lefts commands, we will build up complex Models wit
 For example, if we have a Lefts command T, we can create a new model by using it to transform each function.
 
 ```
-● ┌─ Model ─────────────┐              ┌─ Model ────────────────┐                                                                                                                                                                   
-  │ .fit:     fitter    │  ────T────►  │ .fit:     T(fitter)    │                                                                                                                                                                   
-  │ .predict: predictor │              │ .predict: T(predictor) │                                                                                                                                                                   
-  └─────────────────────┘              └────────────────────────┘
- ```
+┌─ Model ─────────────┐              ┌─ Model ────────────────┐
+│ .fit:     fitter    │  ────T────►  │ .fit:     T(fitter)    │
+│ .predict: predictor │              │ .predict: T(predictor) │
+└─────────────────────┘              └────────────────────────┘
+```
 
 The transformed model has the same interface, so we can keep applying more lefts transformations to it to build up increasingly complex behaviour.
 
@@ -75,18 +76,12 @@ The behaviour can be checked using `mark_train_validation_test_rows`:
 train_test_split.mark_train_validation_test_rows(df)
 ```
 
-```
-┌────────────┬──────────────────────────┬─────────────────────────┐
-│ date       ┆ linear_regression__train ┆ linear_regression__test │
-│ ---        ┆ ---                      ┆ ---                     │
-│ date       ┆ bool                     ┆ bool                    │
-╞════════════╪══════════════════════════╪═════════════════════════╡
-│ 2025-11-01 ┆ true                     ┆ false                   │
-│ 2025-12-01 ┆ true                     ┆ false                   │
-│ 2026-01-01 ┆ false                    ┆ true                    │
-│ 2026-02-01 ┆ false                    ┆ true                    │
-└────────────┴──────────────────────────┴─────────────────────────┘
-```
+| date | linear_regression__train | linear_regression__test |
+|------|--------------------------|-------------------------|
+| 2025-11-01 | true | false |
+| 2025-12-01 | true | false |
+| 2026-01-01 | false | true |
+| 2026-02-01 | false | true |
 
 This illustrates an important invariant of lefts: any command that modifies the train, validate and test filters will only make them more restrictive.
 
@@ -105,18 +100,12 @@ comparison.fit(df)
 comparison.predict(df)
 ```
 
-```
-┌────────────┬───────────────────┬──────────────────┐
-│ date       ┆ linear_regression ┆ lasso_regression │
-│ ---        ┆ ---               ┆ ---              │
-│ date       ┆ f64               ┆ f64              │
-╞════════════╪═══════════════════╪══════════════════╡
-│ 2025-11-01 ┆ 2.01              ┆ 1.99             │
-│ 2025-12-01 ┆ 3.98              ┆ 4.02             │
-│ 2026-01-01 ┆ 6.03              ┆ 5.97             │
-│ 2026-02-01 ┆ 7.99              ┆ 8.01             │
-└────────────┴───────────────────┴──────────────────┘
-```
+| date | linear_regression | lasso_regression |
+|------|------------------|-----------------|
+| 2025-11-01 | 2.01 | 1.99 |
+| 2025-12-01 | 3.98 | 4.02 |
+| 2026-01-01 | 6.03 | 5.97 |
+| 2026-02-01 | 7.99 | 8.01 |
 
 By default each model gets its own output column, named after the model label.
 
@@ -131,18 +120,12 @@ comparison = ensemble(
 )
 ```
 
-```
-┌────────────┬────────────────────┐
-│ date       ┆ mean(linear+lasso) │
-│ ---        ┆ ---                │
-│ date       ┆ f64                │
-╞════════════╪════════════════════╡
-│ 2025-11-01 ┆ 2.00               │
-│ 2025-12-01 ┆ 4.00               │
-│ 2026-01-01 ┆ 6.00               │
-│ 2026-02-01 ┆ 8.00               │
-└────────────┴────────────────────┘
-```
+| date | mean(linear+lasso) |
+|------|--------------------|
+| 2025-11-01 | 2.00 |
+| 2025-12-01 | 4.00 |
+| 2026-01-01 | 6.00 |
+| 2026-02-01 | 8.00 |
 
 The output column takes the name of the ensemble operation.
 
@@ -166,19 +149,16 @@ rolling = lift(
 
 When fit is called, three separate instances of LinearRegression will be created - one for each of the listed dates. Each one will be trained on data from before that model's cutoff. When predict is called, each of the models will only be evaluated on the data for the subsequent month.
 
-```
-┌────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┐
-│ date       ┆ linear_regression[monthly_retrain=2025-11-01] ┆ linear_regression[monthly_retrain=2025-12-01] ┆ linear_regression[monthly_retrain=2026-01-01] │
-╞════════════╪══════════════════════════════════════════════╪══════════════════════════════════════════════╪══════════════════════════════════════════════╡
-│ 2025-11-01 ┆ 2.01                                         ┆ null                                         ┆ null                                         │
-│ 2025-12-01 ┆ null                                         ┆ 3.98                                         ┆ null                                         │
-│ 2026-01-01 ┆ null                                         ┆ null                                         ┆ 6.02                                         │
-└────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────┘
-```
+| date | linear_regression[monthly_retrain=2025-11-01] | linear_regression[monthly_retrain=2025-12-01] | linear_regression[monthly_retrain=2026-01-01] |
+|------|----------------------------------------------|----------------------------------------------|----------------------------------------------|
+| 2025-11-01 | 2.01 | null | null |
+| 2025-12-01 | null | 3.98 | null |
+| 2026-01-01 | null | null | 6.02 |
 
 Each of the per-subset models will output its own column, as with ensemble. However, they will now be labelled with the values you lifted over.
 
 Lift is a very powerful operation. It can be used for:
+
 - Rolling retrain workflows.
 - K-fold cross validation procedures.
 - Doing simultaneous predictions across many targets.
@@ -218,8 +198,8 @@ class LinearRegressionWithOffset:
         self.slope = None
         self.intercept = None
 
-    def fit(self, df: pl.DataFrame) -> None:
-        result = scipy.stats.linregress(df[self.x].to_numpy(), df[self.y].to_numpy())
+    def fit(self, training_set: pl.DataFrame) -> None:
+        result = scipy.stats.linregress(training_set[self.x].to_numpy(), training_set[self.y].to_numpy())
         self.slope = result.slope
         self.intercept = result.intercept
 
@@ -232,6 +212,7 @@ Tune requires that we specify how we will derive the hyperparameter from the sou
 ```python
 def derive_offset(source_model, df):
     df = source_model.predict(df)
+    # The source model will be labelled 'source', so that is the name of the column that will contain the predictions.
     df = df.with_columns(residual=pl.col('source') - pl.col('y'))
     bias = df['residual'].mean()
     return {'offset': bias}

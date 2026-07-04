@@ -9,12 +9,18 @@ Lefts is a very simple domain specific language for building complex machine lea
 Without making subsequent model fitting, evaluation or experimentation any more complex than it was with the original model. This implementation is built on top of the excellent Polars DataFrame library.
 
 
+# Installation
+
+```bash
+pip install lefts
+```
+
 # Commands
 Lefts has five commands, which give it its name:
 - **L**ift: trains multiple copies of a model across different subsets of data.
 - **E**nsemble: Takes a set of models and makes them evaluate as one.
 - **T**une: Allows a model to learn its hyperparameters from another.
-- **F**eeds: Allows the output of one model to be used as a feature or target by another.
+- **F**eed: Allows the output of one model to be used as a feature or target by another.
 - **S**plit: Trains a model on a given train/test/validation split.
 
 # Models
