@@ -158,7 +158,7 @@ Lift will train multiple copies of a model on different, potentially overlapping
 
 ```python
 dates = [dt.date(2025, 11, 1), dt.date(2025, 12, 1), dt.date(2026, 1, 1)]
-linear_regression = leaf(LinearRegression, label='linear_regression')
+linear_regression = leaf(LinearRegression, label='lr')
 
 rolling = lift(
     linear_regression,
@@ -166,10 +166,37 @@ rolling = lift(
     values=dates,
     train_filter=lambda d: pl.col('date') < d,
     test_filter=lambda d: pl.col('date').dt.month() == d.month,
+    aggregate_with=None
 )
 ```
 
-We will create a separate 
+When fit is called, three separate instances of LinearRegression will be created - one for each of the listed dates. Each one will be trained on data from before that models cut off. When predict is called, each of the models will only be evaluated on the data for the subsequent month.
+
+```
+┌────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────┐
+│ date       ┆ linear_regression[monthly_retrain=2025-11-01] ┆ linear_regression[monthly_retrain=2025-12-01] ┆ linear_regression[monthly_retrain=2026-01-01] │
+╞════════════╪══════════════════════════════════════════════╪══════════════════════════════════════════════╪══════════════════════════════════════════════╡
+│ 2025-11-01 ┆ 2.01                                         ┆ null                                         ┆ null                                         │
+│ 2025-12-01 ┆ null                                         ┆ 3.98                                         ┆ null                                         │
+│ 2026-01-01 ┆ null                                         ┆ null                                         ┆ 6.02                                         │
+└────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────┘
+```
+
+Each of the per-subset models will output its own column, as with ensemble. However, they will now be labelled with the values you lifted over.
+
+Lift is a very powerful operation. It can be used for:
+- Rolling retrain workflows.
+- K-fold cross validation procedures.
+- Doing simultaneous predictions across many targets.
+- Injecting strong categorical features into your models.
+- Dealing with Simpson's paradox.
+- And others!
+
+### Feed
+
+
+### Tune
+
 
 
 
