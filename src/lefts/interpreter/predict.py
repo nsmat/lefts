@@ -19,7 +19,11 @@ class _Model:
     logs: Optional[dict] = None
     exceptions: Optional[dict] = None
 
-    def predict(self, df: DataFrame, errors: Literal["raise", "skip_unfit_models", "output_nan"] = "raise") -> DataFrame:
+    def predict(
+        self,
+        df: DataFrame,
+        errors: Literal["raise", "skip_unfit_models", "output_nan"] = "raise",
+    ) -> DataFrame:
         """
         Run predict for every fitted leaf model in the tree.
 
