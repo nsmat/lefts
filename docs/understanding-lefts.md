@@ -1,9 +1,3 @@
-# Installing lefts
-
-```
-pip install lefts
-```
-
 # What does Lefts do?
 
 - Introduce the idea that we are going to train big families of estimators.
@@ -16,17 +10,19 @@ For example, this is a valid estimator:
 
 ```python
 class LinearRegression:
-    def __init__(self):
+    def __init__(self, x = 'x', y = 'y'):
+        self.x = x
+        self.y = y
         self.slope = None
         self.intercept = None
 
     def fit(self, df: pl.DataFrame) -> None:
-        result = scipy.stats.linregress(df["x"].to_numpy(), df["y"].to_numpy())
+        result = scipy.stats.linregress(df[self.x].to_numpy(), df[self.y].to_numpy())
         self.slope = result.slope
         self.intercept = result.intercept
 
     def predict(self, df: pl.DataFrame) -> Iterable:
-        return self.slope * df["x"].to_numpy() + self.intercept
+        return self.slope * df[self.x].to_numpy() + self.intercept
 ```
 
 Which we would pass to leaf like so:
@@ -194,6 +190,18 @@ Lift is a very powerful operation. It can be used for:
 
 ### Feed
 
+Feed is used when one model relies on the output of the second one for either training or prediction. The 'source' is fitted first, its predictions are added to the dataframe as a new column, and then the consumer is fitted on this augmented dataframe. The same augmentation happens at predict time.
+
+```python
+from functools import partial
+
+stage1 = leaf(LinearRegression, label='stage1')
+
+stage_2_estimator = partial(LinearRegression, x='stage1') # Uses the column 'stage1' as its feature
+stage2 = leaf(stage_2_estimator, label='stage2')
+
+chained = feed('two_stage', source=stage1, consumer=stage2)
+```
 
 ### Tune
 
