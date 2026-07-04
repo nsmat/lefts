@@ -41,7 +41,7 @@ leaf returns a lefts Model type, which can be thought of as a set of five functi
 - __train_filter / test_filter / validation_filter__: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
 - __labels__: which gives you unique labels for every estimator instance we create.
 
-The Model output by 'leaf' will look a lot like the original estimator. Calling .fit and .predict will give you exactly the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'linear_regression'.
+The Model output by 'leaf' will look a lot like the original estimator. Calling model.fit and model.predict will give you the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'linear_regression'.
 
 ### Lefts commands are functors
 
@@ -58,6 +58,8 @@ For example, if we have a Lefts command T, we can create a new model by using it
 
 The transformed model has the same interface, so we can keep applying more lefts transformations to it to build up increasingly complex behaviour.
 
+# Lefts commands
+
 ### The Split Command
 
 Let's illustrate this with the simple command 'split':
@@ -66,16 +68,97 @@ Let's illustrate this with the simple command 'split':
 train_test_split = split(
     name='split_linear_regression',
     model=model,
-    train_filter = pl.col('date') < dt.date(2026, 1, 1),
-    test_filter = pl.col('dat') >= dt.date(2026, 1, 1)
+    train_filter=pl.col('date') < dt.date(2026, 1, 1),
+    test_filter=pl.col('date') >= dt.date(2026, 1, 1),
 )
 ```
 
-The resulting model will only fit on data before 2026-01-01, and only generate predictions on data from that date onwards. 
+The resulting model will only fit on data before 2026-01-01, and only generate predictions on data from that date onwards. Beneath the hood, we have taken the intersection of the new filters and the ones already existing on model.
 
-### Invariants
+The behaviour can be checked using `mark_train_validation_test_rows`:
 
-Before describing the remaining commands, we should note that lefts is built around specific invariants
+```python
+train_test_split.mark_train_validation_test_rows(df)
+```
+
+```
+┌────────────┬──────────────────────────┬─────────────────────────┐
+│ date       ┆ linear_regression__train ┆ linear_regression__test │
+│ ---        ┆ ---                      ┆ ---                     │
+│ date       ┆ bool                     ┆ bool                    │
+╞════════════╪══════════════════════════╪═════════════════════════╡
+│ 2025-11-01 ┆ true                     ┆ false                   │
+│ 2025-12-01 ┆ true                     ┆ false                   │
+│ 2026-01-01 ┆ false                    ┆ true                    │
+│ 2026-02-01 ┆ false                    ┆ true                    │
+└────────────┴──────────────────────────┴─────────────────────────┘
+```
+
+This illustrates an important invariant of lefts: any command that modifies the train, validate and test filters will only make them more restrictive.
+
+### Ensemble
+
+Ensemble combines multiple Models so that they always fit and predict in parallel:
+
+```python
+comparison = ensemble(
+    'linear+lasso',
+    leaf(LinearRegression, label='linear_regression'),
+    leaf(LassoRegression, label='lasso_regression'),
+)
+
+comparison.fit(df)
+comparison.predict(df)
+```
+
+```
+┌────────────┬───────────────────┬──────────────────┐
+│ date       ┆ linear_regression ┆ lasso_regression │
+│ ---        ┆ ---               ┆ ---              │
+│ date       ┆ f64               ┆ f64              │
+╞════════════╪═══════════════════╪══════════════════╡
+│ 2025-11-01 ┆ 2.01              ┆ 1.99             │
+│ 2025-12-01 ┆ 3.98              ┆ 4.02             │
+│ 2026-01-01 ┆ 6.03              ┆ 5.97             │
+│ 2026-02-01 ┆ 7.99              ┆ 8.01             │
+└────────────┴───────────────────┴──────────────────┘
+```
+
+By default each model gets its own output column, named after the model label.
+
+The 'aggregate_with' parameter takes a function which operates on a set of dataframe columns and returns a single column. For example, you could take the mean of all the models in the ensemble:
+
+```python
+comparison = ensemble(
+    'mean(linear+lasso)',
+    leaf(LinearRegression, label='linear_regression'),
+    leaf(LassoRegression, label='lasso_regression'),
+    aggregate_with=pl.mean_horizontal,
+)
+```
+
+```
+┌────────────┬────────────┐
+│ date       ┆ mean(linear+lasso) │
+│ ---        ┆ ---                │
+│ date       ┆ f64                │
+╞════════════╪════════════════════╡
+│ 2025-11-01 ┆ 2.00               │
+│ 2025-12-01 ┆ 4.00               │
+│ 2026-01-01 ┆ 6.00               │
+│ 2026-02-01 ┆ 8.00               │
+└────────────┴────────────────────┘
+```
+
+The output column takes the name of the ensemble operation.
+
+### Lift
+
+- Lift 
+
+
+
+
 
 
 
