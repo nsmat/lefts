@@ -1,5 +1,6 @@
 ## What is lefts for?
 Lefts is a tool for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously, for example, if you are:
+
 - Performing cross validation.
 - Ensembling two models.
 - Comparing the performance of different models.
@@ -18,7 +19,6 @@ For example, this is a valid estimator:
 ```python
 import polars as pl
 import scipy.stats
-from typing import Iterable
 
 class LinearRegression:
     def __init__(self, x = 'x', y = 'y'):
@@ -61,7 +61,7 @@ model = leaf(
 )
 ```
 
-# Lefts commands
+## Lefts commands
 
 ### Split
 
@@ -263,7 +263,7 @@ consumer = leaf(parameterised_model, label='consumer')
 consumer.fit(df)
 ```
 
-# Composing lefts commands
+## Composing lefts commands
 
 All the commands listed in the previous section operate on Model objects and return Model objects. This means that the commands compose - you can string them together to build up complicated behaviour.
 

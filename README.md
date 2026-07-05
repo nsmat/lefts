@@ -23,9 +23,7 @@ Lefts has five commands, which give it its name:
 - **F**eed: Allows the output of one model to be used as a feature or target by another.
 - **S**plit: Trains a model on a given train/test/validation split.
 
-# Models
-
-Lefts can operate on any model that is defined by:
+These commands can be applied to any model that is defined by:
 - a fit method, which maps from training data into the model parameters
 - a predict method, which maps from model parameters and test data into predictions.
 
