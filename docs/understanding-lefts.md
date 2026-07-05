@@ -40,7 +40,7 @@ Which we would pass to leaf like so:
 ```python
 from lefts import leaf
 
-model = leaf(LinearRegression, label='linear_regression')
+model = leaf(LinearRegression, label='lr')
 ```
 
 leaf returns a lefts Model type. Like an estimator, it has a .fit and .predict methods, but it also has additional properties which allow it to be modified and manipulated by subsequent lefts commands.
@@ -89,12 +89,19 @@ The behaviour can be checked using `mark_train_validation_test_rows`:
 train_test_split.mark_train_validation_test_rows(df)
 ```
 
-| date | linear_regression__train | linear_regression__test |
-|------|--------------------------|-------------------------|
-| 2025-11-01 | true | false |
-| 2025-12-01 | true | false |
-| 2026-01-01 | false | true |
-| 2026-02-01 | false | true |
+```
+shape: (4, 3)
+┌────────────┬───────────┬──────────┐
+│ date       ┆ lr__train ┆ lr__test │
+│ ---        ┆ ---       ┆ ---      │
+│ date       ┆ bool      ┆ bool     │
+╞════════════╪═══════════╪══════════╡
+│ 2025-11-01 ┆ true      ┆ false    │
+│ 2025-12-01 ┆ true      ┆ false    │
+│ 2026-01-01 ┆ false     ┆ true     │
+│ 2026-02-01 ┆ false     ┆ true     │
+└────────────┴───────────┴──────────┘
+```
 
  
 A leaf considers every row eligible for both training and testing. When a command modifies filters, it does so by taking the intersection of its filters with those already on the model. This means that applying a command can only make the filters more restrictive.
@@ -108,20 +115,27 @@ from lefts import ensemble
 
 comparison = ensemble(
     'linear+lasso',
-    leaf(LinearRegression, label='linear_regression'),
-    leaf(LassoRegression, label='lasso_regression'),
+    leaf(LinearRegression, label='lr'),
+    leaf(LassoRegression, label='lasso'),
 )
 
 comparison.fit(df)
 comparison.predict(df)
 ```
 
-| date | linear_regression | lasso_regression |
-|------|------------------|-----------------|
-| 2025-11-01 | 2.01 | 1.99 |
-| 2025-12-01 | 3.98 | 4.02 |
-| 2026-01-01 | 6.03 | 5.97 |
-| 2026-02-01 | 7.99 | 8.01 |
+```
+shape: (4, 3)
+┌────────────┬──────┬──────────────────┐
+│ date       ┆ lr   ┆ lasso_regression │
+│ ---        ┆ ---  ┆ ---              │
+│ date       ┆ f64  ┆ f64              │
+╞════════════╪══════╪══════════════════╡
+│ 2025-11-01 ┆ 2.01 ┆ 1.99             │
+│ 2025-12-01 ┆ 3.98 ┆ 4.02             │
+│ 2026-01-01 ┆ 6.03 ┆ 5.97             │
+│ 2026-02-01 ┆ 7.99 ┆ 8.01             │
+└────────────┴──────┴──────────────────┘
+```
 
 By default each model gets its own output column, named after the model label.
 
@@ -130,18 +144,25 @@ The 'aggregate_with' parameter takes a function which operates on a set of dataf
 ```python
 comparison = ensemble(
     'mean(linear+lasso)',
-    leaf(LinearRegression, label='linear_regression'),
-    leaf(LassoRegression, label='lasso_regression'),
+    leaf(LinearRegression, label='lr'),
+    leaf(LassoRegression, label='lasso'),
     aggregate_with=pl.mean_horizontal,
 )
 ```
 
-| date | mean(linear+lasso) |
-|------|--------------------|
-| 2025-11-01 | 2.00 |
-| 2025-12-01 | 4.00 |
-| 2026-01-01 | 6.00 |
-| 2026-02-01 | 8.00 |
+```
+shape: (4, 2)
+┌────────────┬────────────────────┐
+│ date       ┆ mean(linear+lasso) │
+│ ---        ┆ ---                │
+│ date       ┆ f64                │
+╞════════════╪════════════════════╡
+│ 2025-11-01 ┆ 2.0                │
+│ 2025-12-01 ┆ 4.0                │
+│ 2026-01-01 ┆ 6.0                │
+│ 2026-02-01 ┆ 8.0                │
+└────────────┴────────────────────┘
+```
 
 The output column takes the name of the ensemble operation.
 
@@ -153,11 +174,11 @@ Lift will train multiple copies of a model on different, potentially overlapping
 from lefts import lift
 
 dates = [dt.date(2025, 11, 1), dt.date(2025, 12, 1), dt.date(2026, 1, 1)]
-linear_regression = leaf(LinearRegression, label='linear_regression')
+lr = leaf(LinearRegression, label='lr')
 
 rolling = lift(
-    linear_regression,
-    name='monthly_retrain',
+    lr,
+    name='monthly',
     values=dates,
     train_filter=lambda d: pl.col('date') < d,
     test_filter=lambda d: pl.col('date').dt.month() == d.month,
@@ -167,11 +188,18 @@ rolling = lift(
 
 When fit is called, three separate instances of LinearRegression will be created - one for each of the listed dates. Each one will be trained on data from before that model's cutoff. When predict is called, each of the models will only be evaluated on the data for the subsequent month.
 
-| date | linear_regression[monthly_retrain=2025-11-01] | linear_regression[monthly_retrain=2025-12-01] | linear_regression[monthly_retrain=2026-01-01] |
-|------|----------------------------------------------|----------------------------------------------|----------------------------------------------|
-| 2025-11-01 | 2.01 | null | null |
-| 2025-12-01 | null | 3.98 | null |
-| 2026-01-01 | null | null | 6.02 |
+```
+shape: (3, 4)
+┌────────────┬────────────────────────┬────────────────────────┬────────────────────────┐
+│ date       ┆ lr[monthly=2025-11-01] ┆ lr[monthly=2025-12-01] ┆ lr[monthly=2026-01-01] │
+│ ---        ┆ ---                    ┆ ---                    ┆ ---                    │
+│ date       ┆ f64                    ┆ f64                    ┆ f64                    │
+╞════════════╪════════════════════════╪════════════════════════╪════════════════════════╡
+│ 2025-11-01 ┆ 2.01                   ┆ null                   ┆ null                   │
+│ 2025-12-01 ┆ null                   ┆ 3.98                   ┆ null                   │
+│ 2026-01-01 ┆ null                   ┆ null                   ┆ 6.02                   │
+└────────────┴────────────────────────┴────────────────────────┴────────────────────────┘
+```
 
 Each of the per-subset models will output its own column, as with ensemble. However, they will now be labelled with the values you lifted over.
 

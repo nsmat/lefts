@@ -158,6 +158,14 @@
   font-size: 1.1rem;
 }
 
+/* ── Monospace font — needs good Unicode box-drawing coverage ─ */
+.md-typeset pre,
+.md-typeset code,
+.md-typeset kbd {
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code',
+               Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+}
+
 /* ── Code ─────────────────────────────────────────────────── */
 .md-typeset code {
   background-color: var(--ft-warm);
