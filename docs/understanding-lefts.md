@@ -1,3 +1,14 @@
+## What is lefts for?
+Lefts is a tool for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously, for example, if you are:
+- Performing cross validation.
+- Ensembling two models.
+- Comparing the performance of different models.
+- Trying to predict multiple different targets.
+- or combinations of the above...
+
+You will very quickly find yourself juggling large numbers of models, complicated train/test data splitting, and inter-model dependencies. Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to explore new modelling approaches that previously would have been too painful.
+
+
 ## Lefts Models and the 'leaf' command
 
 Any lefts workflow must start with the leaf command. The first argument of leaf is a constructor of an 'estimator', that is, an object with a .fit and .predict method which operate on polars dataframes.
@@ -26,7 +37,9 @@ Which we would pass to leaf like so:
 model = leaf(LinearRegression, label='linear_regression')
 ```
 
-leaf returns a lefts Model type. Like an estimator, it has a .fit and .predict methods, but it also has additional properties which allow it to be modified and manipulated by subsequent lefts commands. 
+leaf returns a lefts Model type. Like an estimator, it has a .fit and .predict methods, but it also has additional properties which allow it to be modified and manipulated by subsequent lefts commands.
+
+When a Model calls .fit, it will store all the fitted estimators it trains in a dictionary '.fitted'. If you want access to any of the methods of the original estimator class, they can be accessed there.
 
 ### Using sklearn estimators
 
@@ -46,7 +59,9 @@ model = leaf(
 
 ### Split
 
-Let's illustrate this with the simple command 'split':
+The other lefts commands all operate on Models and modify their behaviour.
+
+Let's illustrate how  with the simple command 'split':
 
 ```python
 train_test_split = split(
@@ -57,7 +72,7 @@ train_test_split = split(
 )
 ```
 
-The resulting model will only fit on data before 2026-01-01, and only generate predictions on data from that date onwards. Beneath the hood, we have taken the intersection of the new filters and the ones already existing on model.
+The resulting model will only fit on data before 2026-01-01, and only generate predictions on data from that date onwards.
 
 The behaviour can be checked using `mark_train_validation_test_rows`:
 
@@ -72,7 +87,9 @@ train_test_split.mark_train_validation_test_rows(df)
 | 2026-01-01 | false | true |
 | 2026-02-01 | false | true |
 
-This illustrates an important invariant of lefts: any command that modifies the train, validate and test filters will only make them more restrictive.
+Every Model has functions ('filters') that determine whether a row of a given dataframe is part of the train, test and validation periods. These filters are used to ensure only the right data is seen when we call .fit and .predict. 
+ 
+By default, a leaf considers every row eligible for both training and testing. Split works by taking the intersection of its filters with those already on the model — so applied to a fresh leaf it simply applies the filters directly, and applied to an already-filtered model it can only narrow the sets further, never widen them.
 
 ### Ensemble
 

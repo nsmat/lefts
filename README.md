@@ -33,84 +33,42 @@ A Lefts command creates a new model by transforming these functions into a new .
 
 # An example
 
-The following code shows lefts can be used to create complex models out of more basic ones. We start with an LGBM Regression model, and train an ensemble of models to predict each quantile. The ensemble is trained in a monthly rolling retrain.
-
-See notebooks/quantile_ensemble.py for the full code.
+The following code creates a rolling monthly retrain workflow: twelve copies of a Ridge regression, each trained on all data before its month and evaluated on that month only.
 
 ```python
-from lefts import leaf, lift, ensemble
+from lefts import leaf, lift
 from lefts.helpers import tabular_model
-from functools import partial
 
 import polars as pl
-from lightgbm import LGBMRegressor
+from sklearn.linear_model import Ridge
 import datetime as dt
 
-features = ["temp", "atemp", "hum", "windspeed", "hr", "weekday", "mnth"]
-target = "cnt"
-quantiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-test_period_start_dates = pl.datetime_range(
-    start = dt.datetime(2011, 3, 1),
-    end = dt.datetime(2012, 12, 1),
-    interval='1mo',
-    eager=True
-).to_list()
+features = ["temp", "humidity", "hour"]
+target = "demand"
 
-quantile_models = []
-for q in quantiles:
-    # Convert LGBMRegressor into the format required by lefts
-    base_model = leaf(tabular_model(
-                partial(LGBMRegressor, objective="quantile", alpha=q),
-                features=features,
-                target=target,
-            ),
-            label=f"q{q}",
-                     )
+dates = [dt.date(2024, m, 1) for m in range(1, 13)]
 
-    # 'Lift' each per-quantile model into a family of models, each with a different train and test period
-    rolling_retrain = lift(
-        base_model,
-        name=f"q{q}_rolling_retrain",
-        values=test_period_start_dates,
+model = lift(
+    leaf(tabular_model(Ridge, features=features, target=target), label='ridge'),
+    name='monthly_retrain',
+    values=dates,
+    train_filter=lambda d: pl.col('date') < d,
+    test_filter=lambda d: pl.col('date').dt.month() == d.month,
+    aggregate_with=pl.coalesce,
+)
 
-        # A row is in a given train period if it is before the start of the test period
-        train_filter=lambda test_period_start_date: pl.col("datetime") < test_period_start_date,
-        # Each test period is one month long
-        test_filter=lambda test_period_start_date: pl.col("datetime").dt.month() == test_period_start_date.month,
-        aggregate_with=pl.coalesce,
-    )
-
-    quantile_models.append(rolling_retrain)
-
-model = ensemble("quantiles", *quantile_models)
-
-# Fits |quantiles| x |test_period_start_dates| models
+# Fits 12 independent models
 model.fit(df)
 
-# Adds |quantiles| columns, each with the unique prediction associated with that test row. 
+# Each row gets the prediction from the model trained up to its month
 predictions = model.predict(df)
 ```
 
-Behind the scenes, the full workflow is constructed as a tree of lefts expression. You can see this tree by calling `model.print_tree()`
+You can inspect the workflow before running it with `model.print_tree()`:
 
 ```
-Ensemble 'quantiles' (198 models)  → outputs: [q0.1_rolling_retrain, ..., q0.9_rolling_retrain]
-    ├── Lift 'q0.1_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.1_rolling_retrain"
-    │   └── Leaf 'q0.1' (1 model)
-    ├── Lift 'q0.2_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.2_rolling_retrain"
-    │   └── Leaf 'q0.2' (1 model)
-    ├── Lift 'q0.3_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.3_rolling_retrain"
-    │   └── Leaf 'q0.3' (1 model)
-    ├── Lift 'q0.4_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.4_rolling_retrain"
-    │   └── Leaf 'q0.4' (1 model)
-    ├── Lift 'q0.5_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.5_rolling_retrain"
-    │   └── Leaf 'q0.5' (1 model)
-    ├── Lift 'q0.6_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.6_rolling_retrain"
-    │   └── Leaf 'q0.6' (1 model)
-    ├── Lift 'q0.7_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.7_rolling_retrain"
-    │   └── Leaf 'q0.7' (1 model)
-    ├── Lift 'q0.8_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.8_rolling_retrain"
-    │   └── Leaf 'q0.8' (1 model)
-    └── Lift 'q0.9_rolling_retrain' (22 models): [2011-03-01 00:00:00, ..., 2012-12-01 00:00:00]  ⇒ coalesce → "q0.9_rolling_retrain"
-        └── Leaf 'q0.9' (1 model)
+Lift 'monthly_retrain' (12 models): [2024-01-01, ..., 2024-12-01]  ⇒ coalesce → "monthly_retrain"
+    └── Leaf 'ridge'
 ```
+
+For a more complex example combining lift, ensemble and other commands, see `notebooks/quantile_ensemble.ipynb`.
