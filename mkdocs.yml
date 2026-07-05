@@ -36,6 +36,7 @@ plugins:
 
 nav:
   - Getting Started: understanding-lefts.md
+  - Design Philosophy: design-philosophy.md
   - API Reference:
     - Commands: api/commands.md
     - Model: api/model.md

@@ -26,7 +26,7 @@ Which we would pass to leaf like so:
 model = leaf(LinearRegression, label='linear_regression')
 ```
 
-leaf returns a lefts Model type. Like an estimator, it has a .fit and .predict methods, but it also has methods which ensure only the right training/test data are available when fit/predict are called.
+leaf returns a lefts Model type. Like an estimator, it has a .fit and .predict methods, but it also has additional properties which allow it to be modified and manipulated by subsequent lefts commands. 
 
 ### Using sklearn estimators
 
@@ -261,7 +261,9 @@ rolling_lasso = lift(
 comparison = ensemble('comparison', rolling_linear, rolling_lasso)
 ```
 
-Calling `comparison.print_tree()` shows the resulting workflow:
+The resulting workflow is a tree of lefts commands. This illustrates why the first command was called 'leaf' - the basic estimators are always the leaves of this tree. 
+
+lefts is always evaluated lazily. Before calling .fit and .predict, you could call `comparison.print_tree()` to see the resulting workflow:
 
 ```
 Ensemble 'comparison' (6 models)  → outputs: [monthly_linear, monthly_lasso]
@@ -272,37 +274,9 @@ Ensemble 'comparison' (6 models)  → outputs: [monthly_linear, monthly_lasso]
 ```
 
 
-# How lefts works
+---
 
-A Model can be thought of as a set of five functions:
-
-- **fit**: creates estimator instances and optimises their parameters over the train set.
-- **factory**: called by fit to instantiate all the estimators required by the workflow.
-- **predict**: generates predictions on the test rows.
-- **train_filter / test_filter / validation_filter**: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
-- **labels**: which gives you unique labels for every estimator instance we create.
-
-The Model output by 'leaf' will look a lot like the original estimator. Calling model.fit and model.predict will give you the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'linear_regression'.
-
-
-### Lefts commands are functors
-
-However, as we apply further lefts commands, we will build up complex Models with heavily modified variants of the five functions. Each command is a functor that modifies those functions to yield a new, transformed model. 
-
-For example, if we have a Lefts command T, we can create a new model by using it to transform each function.
-
-```
-┌─ Model ─────────────┐              ┌─ Model ────────────────┐
-│ .fit:     fitter    │  ────T────►  │ .fit:     T(fitter)    │
-│ .predict: predictor │              │ .predict: T(predictor) │
-└─────────────────────┘              └────────────────────────┘
-```
-
-The transformed model has the same interface, so we can keep applying more lefts transformations to it to build up increasingly complex behaviour.
-
-
-
-
+For a deeper look at how lefts is designed and why commands compose, see [Design philosophy](design-philosophy.md).
 
 
 
