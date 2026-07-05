@@ -16,16 +16,10 @@ Any lefts workflow must start with the leaf command. The first argument of leaf 
 For example, this is a valid estimator:
 
 ```python
-from lefts import leaf, split, ensemble, lift, feed, tune
-from lefts.helpers import tabular_model
 import polars as pl
 import scipy.stats
-import datetime as dt
 from typing import Iterable
-from functools import partial
-```
 
-```python
 class LinearRegression:
     def __init__(self, x = 'x', y = 'y'):
         self.x = x
@@ -44,6 +38,8 @@ class LinearRegression:
 
 Which we would pass to leaf like so:
 ```python
+from lefts import leaf
+
 model = leaf(LinearRegression, label='linear_regression')
 ```
 
@@ -74,6 +70,9 @@ Every Model has functions ('filters') that determine whether a row of a given da
 Let's illustrate with the simple command 'split':
 
 ```python
+from lefts import split
+import datetime as dt
+
 train_test_split = split(
     name='split_linear_regression',
     model=model,
@@ -105,6 +104,8 @@ A leaf considers every row eligible for both training and testing. When a comman
 Ensemble combines multiple Models so that they always fit and predict in parallel:
 
 ```python
+from lefts import ensemble
+
 comparison = ensemble(
     'linear+lasso',
     leaf(LinearRegression, label='linear_regression'),
@@ -149,6 +150,8 @@ The output column takes the name of the ensemble operation.
 Lift will train multiple copies of a model on different, potentially overlapping subsets of the data. For example, suppose you want to create a 'rolling retrain' workflow, where the same model is retrained every month.
 
 ```python
+from lefts import lift
+
 dates = [dt.date(2025, 11, 1), dt.date(2025, 12, 1), dt.date(2026, 1, 1)]
 linear_regression = leaf(LinearRegression, label='linear_regression')
 
@@ -186,6 +189,7 @@ Lift is a very powerful operation. It can be used for:
 Feed is used when one model relies on the output of another for either training or prediction. The 'source' is fitted first, its predictions are added to the dataframe as a new column, and then the consumer is fitted on this augmented dataframe. The same augmentation happens at predict time.
 
 ```python
+from lefts import feed
 from functools import partial
 
 stage1 = leaf(LinearRegression, label='stage1')
@@ -236,6 +240,8 @@ def derive_offset(source_model, df):
 Then the hyperparameter tuning workflow provided by using Tune:
 
 ```python
+from lefts import tune
+
 source   = leaf(LinearRegression, label='source')
 consumer = leaf(LinearRegressionWithOffset, label='consumer')
 
