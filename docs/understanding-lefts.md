@@ -16,6 +16,16 @@ Any lefts workflow must start with the leaf command. The first argument of leaf 
 For example, this is a valid estimator:
 
 ```python
+from lefts import leaf, split, ensemble, lift, feed, tune
+from lefts.helpers import tabular_model
+import polars as pl
+import scipy.stats
+import datetime as dt
+from typing import Iterable
+from functools import partial
+```
+
+```python
 class LinearRegression:
     def __init__(self, x = 'x', y = 'y'):
         self.x = x
