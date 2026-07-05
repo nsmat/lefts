@@ -26,32 +26,21 @@ Which we would pass to leaf like so:
 model = leaf(LinearRegression, label='linear_regression')
 ```
 
-leaf returns a lefts Model type, which can be thought of as a set of five functions:
+leaf returns a lefts Model type. Like an estimator, it has a .fit and .predict methods, but it also has methods which ensure only the right training/test data are available when fit/predict are called.
 
-- **fit**: creates estimator instances and optimises their parameters over the train set.
-- **factory**: called by fit to instantiate all the estimators required by the workflow.
-- **predict**: generates predictions on the test rows.
-- **train_filter / test_filter / validation_filter**: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
-- **labels**: which gives you unique labels for every estimator instance we create.
+### Using sklearn estimators
 
-Model also has an attribute 'fitted', which stores the trained estimator instances.
+Writing your own estimator class is often unnecessary - lefts includes a function that wraps an sklearn estimator to be ready for feeding into leaf:
 
-The Model output by 'leaf' will look a lot like the original estimator. Calling model.fit and model.predict will give you the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'linear_regression'.
+```python
+from lefts.helpers import tabular_model
+from sklearn.linear_model import Lasso
 
-### Lefts commands are functors
-
-However, as we apply further lefts commands, we will build up complex Models with heavily modified variants of the five functions. Each command is a functor that modifies those functions to yield a new, transformed model. 
-
-For example, if we have a Lefts command T, we can create a new model by using it to transform each function.
-
+model = leaf(
+    tabular_model(Lasso(), features=['x'], target='y'),
+    label='lasso',
+)
 ```
-┌─ Model ─────────────┐              ┌─ Model ────────────────┐
-│ .fit:     fitter    │  ────T────►  │ .fit:     T(fitter)    │
-│ .predict: predictor │              │ .predict: T(predictor) │
-└─────────────────────┘              └────────────────────────┘
-```
-
-The transformed model has the same interface, so we can keep applying more lefts transformations to it to build up increasingly complex behaviour.
 
 # Lefts commands
 
@@ -221,7 +210,7 @@ def derive_offset(source_model, df):
 Then the hyperparameter tuning workflow provided by using Tune:
 
 ```python
-source   = leaf(LinearRegression,           label='source')
+source   = leaf(LinearRegression, label='source')
 consumer = leaf(LinearRegressionWithOffset, label='consumer')
 
 tuned = tune('bias_correction', source=source, consumer=consumer, logic=derive_offset)
@@ -242,8 +231,74 @@ consumer = leaf(parameterised_model, label='consumer')
 consumer.fit(df)
 ```
 
+# Composing lefts commands
+
+All the commands listed in the previous section operate on Model objects and return Model objects. This means that the commands compose - you can string them together to build up complicated behaviour.
+
+For example, in the following we ensemble two different lifted estimators.
+
+```python
+dates = [dt.date(2025, 11, 1), dt.date(2025, 12, 1), dt.date(2026, 1, 1)]
+
+rolling_linear = lift(
+    leaf(LinearRegression, label='linear'),
+    name='monthly_linear',
+    values=dates,
+    train_filter=lambda d: pl.col('date') < d,
+    test_filter=lambda d: pl.col('date').dt.month() == d.month,
+    aggregate_with=pl.coalesce,
+)
+
+rolling_lasso = lift(
+    leaf(LassoRegression, label='lasso'),
+    name='monthly_lasso',
+    values=dates,
+    train_filter=lambda d: pl.col('date') < d,
+    test_filter=lambda d: pl.col('date').dt.month() == d.month,
+    aggregate_with=pl.coalesce,
+)
+
+comparison = ensemble('comparison', rolling_linear, rolling_lasso)
+```
+
+Calling `comparison.print_tree()` shows the resulting workflow:
+
+```
+Ensemble 'comparison' (6 models)  → outputs: [monthly_linear, monthly_lasso]
+    ├── Lift 'monthly_linear' (3 models): [2025-11-01, 2025-12-01, 2026-01-01]  ⇒ coalesce → "monthly_linear"
+    │   └── Leaf 'linear'
+    └── Lift 'monthly_lasso' (3 models): [2025-11-01, 2025-12-01, 2026-01-01]  ⇒ coalesce → "monthly_lasso"
+        └── Leaf 'lasso'
+```
 
 
+# How lefts works
+
+A Model can be thought of as a set of five functions:
+
+- **fit**: creates estimator instances and optimises their parameters over the train set.
+- **factory**: called by fit to instantiate all the estimators required by the workflow.
+- **predict**: generates predictions on the test rows.
+- **train_filter / test_filter / validation_filter**: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
+- **labels**: which gives you unique labels for every estimator instance we create.
+
+The Model output by 'leaf' will look a lot like the original estimator. Calling model.fit and model.predict will give you the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'linear_regression'.
+
+
+### Lefts commands are functors
+
+However, as we apply further lefts commands, we will build up complex Models with heavily modified variants of the five functions. Each command is a functor that modifies those functions to yield a new, transformed model. 
+
+For example, if we have a Lefts command T, we can create a new model by using it to transform each function.
+
+```
+┌─ Model ─────────────┐              ┌─ Model ────────────────┐
+│ .fit:     fitter    │  ────T────►  │ .fit:     T(fitter)    │
+│ .predict: predictor │              │ .predict: T(predictor) │
+└─────────────────────┘              └────────────────────────┘
+```
+
+The transformed model has the same interface, so we can keep applying more lefts transformations to it to build up increasingly complex behaviour.
 
 
 
