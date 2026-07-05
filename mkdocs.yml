@@ -29,6 +29,9 @@ extra_css:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
   - mkdocstrings:
       handlers:
         python:
@@ -40,6 +43,10 @@ plugins:
 nav:
   - Getting Started: understanding-lefts.md
   - Design Philosophy: design-philosophy.md
+  - Examples:
+    - Quantile ensemble: notebooks/quantile_ensemble.ipynb
+    - LGBM rolling retrain with early stopping: notebooks/lgbm_rolling_retrain_early_stopping.ipynb
+    - Teacher-student models: notebooks/teacher_student.ipynb
   - API Reference:
     - Commands: api/commands.md
     - Model: api/model.md

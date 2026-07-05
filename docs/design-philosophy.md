@@ -10,9 +10,8 @@ A Model can be thought of as a set of five functions:
 - **train_filter / test_filter / validation_filter**: Polars expressions which tell you whether each row of a dataframe is in the train/test/validation set.
 - **labels**: which gives you unique labels for every estimator instance we create.
 
-The Model output by 'leaf' will look a lot like the original estimator. Calling model.fit and model.predict will give you the same result as if you just used LinearRegression. The filters will mark every row of the dataframe as being in the train, validation, or test sets. The only label is 'lr'.
 
-However, as we apply further lefts commands, we will build up complex Models with heavily modified variants of the five functions. Each command is a functor that modifies those functions to yield a new, transformed model.
+As we apply lefts commands, we will build up complex Models with heavily modified variants of the five functions. Each command is a functor that modifies those functions to yield a new, transformed model.
 
 For example, if we have a Lefts command T, we can create a new model by using it to transform each function.
 
