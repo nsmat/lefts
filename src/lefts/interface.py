@@ -1,6 +1,6 @@
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 
 from polars import DataFrame, Expr
 
@@ -8,7 +8,6 @@ from .interpreter.fit import _fit
 from .interpreter.predict import _Model
 from .interpreter.masks import _collect_masks
 from .interpreter.labels import _print_tree, _collect_labels
-from .interpreter.params import FitLogging, FitErrors
 from .nodes import Ensemble, Feed, Leaf, Tune, Lift, Split
 from .validation import _validate
 
@@ -21,8 +20,8 @@ class Model(_Model):
     def fit(
         self,
         df: DataFrame,
-        logging: FitLogging = "capture",
-        errors: FitErrors = "raise",
+        logging: Literal["capture", "drop", "print"] = "capture",
+        errors: Literal["capture", "raise"] = "raise",
     ):
         """
         Fit every leaf model in the tree.
@@ -41,13 +40,13 @@ class Model(_Model):
                 and continues fitting the remaining models.
         """
 
-        models, hyperparameters, logs, exceptions = _fit(
+        fitted, hyperparameters, logs, exceptions = _fit(
             self.root,
             df,
             logging=logging,
             errors=errors,
         )
-        self.models = models
+        self.fitted = fitted
         self.hyperparameters = hyperparameters
         self.logs = logs
         self.exceptions = exceptions
@@ -62,7 +61,7 @@ class Model(_Model):
     def print_tree(self, print_all_labels: bool = False):
         print(
             _print_tree(
-                self.root, print_all_labels=print_all_labels, models=self.models
+                self.root, print_all_labels=print_all_labels, models=self.fitted
             )
         )
 

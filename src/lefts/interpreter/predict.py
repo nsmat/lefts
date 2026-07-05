@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterator, Optional
+from typing import Iterator, Literal, Optional
 
 from .params import PredictErrors, _check_literal
 
@@ -14,12 +14,16 @@ from .masks import _collect_masks
 @dataclass
 class _Model:
     root: LeftsNode
-    models: Optional[dict] = None
+    fitted: Optional[dict] = None
     hyperparameters: Optional[dict] = None
     logs: Optional[dict] = None
     exceptions: Optional[dict] = None
 
-    def predict(self, df: DataFrame, errors: PredictErrors = "raise") -> DataFrame:
+    def predict(
+        self,
+        df: DataFrame,
+        errors: Literal["raise", "skip_unfit_models", "output_nan"] = "raise",
+    ) -> DataFrame:
         """
         Run predict for every fitted leaf model in the tree.
 
@@ -32,7 +36,7 @@ class _Model:
                 - skip_unfit_models: silently omits the output column for any unfit model.
                 - output_nan: adds the output column but fills it entirely with null.
         """
-        return _predict(self.root, self.models, df, errors=errors)
+        return _predict(self.root, self.fitted, df, errors=errors)
 
     def fit(self, df: DataFrame):
         raise NotImplementedError()

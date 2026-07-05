@@ -27,6 +27,9 @@ dev  = [
     "jupyter",
     "jupyterlab",
     "nbstripout",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-jupyter>=0.26.3",
 ]
 
 [build-system]
