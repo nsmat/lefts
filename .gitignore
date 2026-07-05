@@ -6,3 +6,4 @@
 .ruff_cache
 uv.lock
 site/
+.cache/
