@@ -33,12 +33,12 @@ class LinearRegression:
         self.slope = None
         self.intercept = None
 
-    def fit(self, training_set: pl.DataFrame) -> None:
+    def fit(self, training_set: pl.DataFrame):
         result = scipy.stats.linregress(training_set[self.x].to_numpy(), training_set[self.y].to_numpy())
         self.slope = result.slope
         self.intercept = result.intercept
 
-    def predict(self, df: pl.DataFrame) -> Iterable:
+    def predict(self, df: pl.DataFrame):
         return self.slope * df[self.x].to_numpy() + self.intercept
 ```
 
@@ -69,9 +69,9 @@ model = leaf(
 
 ### Split
 
-The other lefts commands all operate on Models and modify their behaviour.
+Every Model has functions ('filters') that determine whether a row of a given dataframe is part of the train, test and validation periods. These filters are used to ensure only the right data is seen when we call .fit and .predict. During fitting, we only see train and validation data, during prediction, we only see test data.
 
-Let's illustrate how  with the simple command 'split':
+Let's illustrate with the simple command 'split':
 
 ```python
 train_test_split = split(
@@ -97,9 +97,8 @@ train_test_split.mark_train_validation_test_rows(df)
 | 2026-01-01 | false | true |
 | 2026-02-01 | false | true |
 
-Every Model has functions ('filters') that determine whether a row of a given dataframe is part of the train, test and validation periods. These filters are used to ensure only the right data is seen when we call .fit and .predict. 
  
-By default, a leaf considers every row eligible for both training and testing. Split works by taking the intersection of its filters with those already on the model — so applied to a fresh leaf it simply applies the filters directly, and applied to an already-filtered model it can only narrow the sets further, never widen them.
+A leaf considers every row eligible for both training and testing. When a command modifies filters, it does so by taking the intersection of its filters with those already on the model. This means that applying a command can only make the filters more restrictive.
 
 ### Ensemble
 
