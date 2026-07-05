@@ -37,7 +37,7 @@ from lefts.helpers import tabular_model
 from sklearn.linear_model import Lasso
 
 model = leaf(
-    tabular_model(Lasso(), features=['x'], target='y'),
+    tabular_model(Lasso, features=['x'], target='y'),
     label='lasso',
 )
 ```

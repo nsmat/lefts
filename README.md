@@ -40,6 +40,7 @@ See notebooks/quantile_ensemble.py for the full code.
 ```python
 from lefts import leaf, lift, ensemble
 from lefts.helpers import tabular_model
+from functools import partial
 
 import polars as pl
 from lightgbm import LGBMRegressor
@@ -59,7 +60,7 @@ quantile_models = []
 for q in quantiles:
     # Convert LGBMRegressor into the format required by lefts
     base_model = leaf(tabular_model(
-                LGBMRegressor(objective="quantile", alpha=q),
+                partial(LGBMRegressor, objective="quantile", alpha=q),
                 features=features,
                 target=target,
             ),
