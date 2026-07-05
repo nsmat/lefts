@@ -41,6 +41,7 @@ plugins:
             show_root_heading: true
 
 nav:
+  - Home: index.md
   - Getting Started: understanding-lefts.md
   - Design Philosophy: design-philosophy.md
   - Examples:

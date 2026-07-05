@@ -1,6 +1,7 @@
 # Lefts: composable machine-learning model transformations
 
 Lefts is a very simple domain specific language for building complex machine learning workflows from simple ones. Starting with your favourite machine learning models, you can use Lefts operations to:
+
 - Build complex ensembles.
 - Build complex cross validation and hyper-parametrisation procedures.
 - Allow a model to create features or targets for another model.
@@ -17,6 +18,7 @@ pip install lefts
 
 # Commands
 Lefts has five commands, which give it its name:
+
 - **L**ift: trains multiple copies of a model across different subsets of data.
 - **E**nsemble: Takes a set of models and makes them evaluate as one.
 - **T**une: Allows a model to learn its hyperparameters from another.
@@ -24,6 +26,7 @@ Lefts has five commands, which give it its name:
 - **S**plit: Trains a model on a given train/test/validation split.
 
 These commands can be applied to any model that is defined by:
+
 - a fit method, which maps from training data into the model parameters
 - a predict method, which maps from model parameters and test data into predictions.
 
@@ -69,4 +72,4 @@ Lift 'monthly_retrain' (12 models): [2024-01-01, ..., 2024-12-01]  ⇒ coalesce 
     └── Leaf 'ridge'
 ```
 
-For a more complex example combining lift, ensemble and other commands, see `notebooks/quantile_ensemble.ipynb`.
+For more complex examples, see the 'Examples' section in the docs.
