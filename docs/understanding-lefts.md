@@ -1,5 +1,5 @@
 ## What is lefts for?
-Lefts is a tool for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously, for example, if you are:
+Lefts is a tool for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously, for example:
 
 - Performing cross validation.
 - Ensembling two models.
@@ -7,7 +7,7 @@ Lefts is a tool for machine learning scientists, data analysts and quants that a
 - Trying to predict multiple different targets.
 - or combinations of the above...
 
-You will very quickly find yourself juggling large numbers of models, complicated train/test data splitting, and inter-model dependencies. Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to explore new modelling approaches that previously would have been too painful.
+Requires juggling large numbers of models, complicated train/test data splitting, and inter-model dependencies. Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to explore some powerful new modelling approaches that previously would have been too painful.
 
 
 ## Lefts Models and the 'leaf' command
