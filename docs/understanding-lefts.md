@@ -7,7 +7,8 @@ Lefts is a tool for machine learning scientists, data analysts and quants that a
 - Trying to predict multiple different targets.
 - or combinations of the above...
 
-Requires juggling large numbers of models, complicated train/test data splitting, and inter-model dependencies. Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to explore some powerful new modelling approaches that previously would have been too painful.
+Usually, these workflows juggling large numbers of models, complicated train/test data splitting, and inter-model dependencies. Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to explore some powerful new modelling approaches that previously would have been too painful.
+
 
 
 ## Lefts Models and the 'leaf' command
