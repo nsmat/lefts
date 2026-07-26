@@ -1,7 +1,7 @@
 ## What is lefts for?
-Lefts is a tiny domain specific language for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously. For example, cross validation, ensembling or scaling an ML workflow to new targets usually explode the complexity as you need to manage train and test pipelines and prevent data leakage for every model at once. 
+Lefts is a tiny domain-specific language for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously. For example, cross validation, ensembling or scaling an ML workflow to new targets usually explodes the complexity as you need to manage train and test pipelines and prevent data leakage for every model at once.
 
-Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to experiment freely with new model architectures and explore previously intractible methods.
+Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to experiment freely with new model architectures and explore previously intractable methods.
 
 The core design features of lefts are:
 * A wide range of behaviours is captured by a small number of commands. 
@@ -16,7 +16,7 @@ The core design features of lefts are:
 Any lefts workflow must start with the leaf command. The first argument of leaf is a constructor of an 'estimator', that is, an object with two methods:
 
 * `fit(training_set: pl.DataFrame, validation_set: pl.DataFrame) -> None`, which trains your model and stores the parameters. The presence of a validation set argument is optional.
-* `predict(test_set: pl.DataFrame) -> Iterable`: which evaluates your model and returns the predictions.
+* `predict(test_set: pl.DataFrame) -> Iterable`, which evaluates your model and returns the predictions.
 
 For example, this is a valid estimator:
 
