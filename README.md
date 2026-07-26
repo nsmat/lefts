@@ -1,4 +1,4 @@
-# Lefts: composable machine-learning model transformations
+# Lefts: composable transformations for creative machine learning
 
 Lefts is a very simple domain specific language for building complex machine learning workflows from simple ones. Starting with your favourite machine learning models, you can use Lefts operations to:
 

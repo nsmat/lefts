@@ -1,18 +1,22 @@
 ## What is lefts for?
-Lefts is a tool for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously, for example:
+Lefts is a tiny domain specific language for machine learning scientists, data analysts and quants that are applying machine learning models to real data. It is useful whenever you need to manage a large number of models simultaneously. For example, cross validation, ensembling or scaling an ML workflow to new targets usually explode the complexity as you need to manage train and test pipelines and prevent data leakage for every model at once. 
 
-- Performing cross validation.
-- Ensembling two models.
-- Comparing the performance of different models.
-- Trying to predict multiple different targets.
-- or combinations of the above...
+Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to experiment freely with new model architectures and explore previously intractible methods.
 
-Requires juggling large numbers of models, complicated train/test data splitting, and inter-model dependencies. Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to explore some powerful new modelling approaches that previously would have been too painful.
+The core design features of lefts are:
+* A wide range of behaviours is captured by a small number of commands. 
+* Interacting with a workflow doesn't get more complicated as you experiment with it.
+* Lefts commands always compose, so you can easily build up arbitrarily complex behaviour.
+* Train/test splits are transparent and enforced by lefts.
+* Lefts workflows are lazily evaluated, allowing issues to be caught before touching the training data.
 
 
 ## Lefts Models and the 'leaf' command
 
-Any lefts workflow must start with the leaf command. The first argument of leaf is a constructor of an 'estimator', that is, an object with a .fit and .predict method which operate on polars dataframes.
+Any lefts workflow must start with the leaf command. The first argument of leaf is a constructor of an 'estimator', that is, an object with two methods:
+
+* `fit(training_set: pl.DataFrame, validation_set: pl.DataFrame) -> None`, which trains your model and stores the parameters. The presence of a validation set argument is optional.
+* `predict(test_set: pl.DataFrame) -> Iterable`: which evaluates your model and returns the predictions.
 
 For example, this is a valid estimator:
 
