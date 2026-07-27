@@ -4,7 +4,8 @@ Lefts is a tiny domain-specific language for machine learning scientists, data a
 Lefts takes care of that for you, so you can focus on the modelling. By making orchestration simple, it allows you to experiment freely with new model architectures and explore previously intractable methods.
 
 The core design features of lefts are:
-* A wide range of behaviour is captured by a small number of commands. 
+
+* A wide range of behaviour is captured by a small number of commands.
 * Interacting with a workflow doesn't get more complicated as you experiment with it.
 * Lefts commands always compose, so you can easily build up arbitrarily complex behaviour.
 * Train/test/validation splits are transparent and enforced by lefts.
