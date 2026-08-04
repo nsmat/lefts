@@ -7,3 +7,4 @@
 uv.lock
 site/
 .cache/
+*.ipynb_checkpoints
