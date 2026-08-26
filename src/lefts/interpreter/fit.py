@@ -188,6 +188,10 @@ def _fit(
                 _fit(
                     source,
                     df,
+                    hyperparameters,
+                    label_context,
+                    False,
+                    precomputed_masks,
                     logging=logging,
                     errors=errors,
                 )
@@ -196,7 +200,7 @@ def _fit(
             exceptions |= source_exceptions
 
             if errors == "capture" and _failed_in_subtree(
-                source, {}, source_exceptions
+                source, label_context, source_exceptions
             ):
                 exceptions[node.name] = UpstreamFitFailure(
                     f"Tune '{node.name}' consumer skipped: source models failed to fit "

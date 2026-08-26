@@ -145,6 +145,30 @@ def test_fit_tune_threads_hyperparameters(test_dataframe):
     assert models["consumer"].value == 10.0
 
 
+def test_fit_tune_inside_split_propagates_train_mask(test_dataframe):
+    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
+    consumer_leaf = Leaf(
+        label="consumer",
+        factory=lambda offset=0.0: _OffsetModel(offset=offset),
+    )
+    tune = Tune(
+        name="test",
+        consumer=consumer_leaf,
+        source=source_leaf,
+        logic=_mean_of_source_training_data,
+    )
+    node = Split(
+        name="tt",
+        child=tune,
+        train_filter=pl.col("x") < 5,
+        test_filter=pl.lit(True),
+    )
+    models, *_ = _fit(node, test_dataframe)
+    # The enclosing Split restricts training rows to x<5, so the tune's source
+    # must only see [1, 2, 3, 4] - the mask has to propagate through Tune.
+    assert models["source"].seen == [1, 2, 3, 4]
+
+
 # ── Ensemble ──────────────────────────────────────────────────────────
 
 
