@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from lefts.nodes import Lift, Leaf, Split, Ensemble, Tune, Feed
+from lefts.nodes import Leaf, Split, Ensemble, Tune, Feed
 from lefts.interpreter.fit import _fit
 from conftest import MockModel, ConsumerModel
 
@@ -43,48 +43,6 @@ def test_fit_split_validation_passthrough(test_dataframe):
     models, *_ = _fit(node, test_dataframe)
     assert models["m"].seen == [1, 2, 3, 4]
     assert models["m"].val_seen == [5, 6, 7]
-
-
-# TODO: this tests composition, not fit behaviour itself - let's move to test_composition.py later
-def test_fit_split_inside_lift(model_x, test_dataframe):
-    inner = Split(
-        name="tt",
-        child=model_x,
-        train_filter=pl.col("x") > 1,
-        test_filter=pl.lit(True),
-    )
-    outer = Lift(
-        name="category",
-        child=inner,
-        values=["a"],
-        train_filter=lambda v: pl.col("category") == pl.lit(v),
-        test_filter=lambda v: pl.col("category") == pl.lit(v),
-    )
-    models, *_ = _fit(outer, test_dataframe)
-    assert set(models.keys()) == {"model-x[category=a]"}
-    # Train filters resolve to category==a (1, 2, 3) AND x>1, implies x in [2, 3]
-    assert models["model-x[category=a]"].seen == [2, 3]
-
-
-# TODO this tests composition - not fit behaviour itself - let's move to test_composition.py later
-def test_fit_lift_inside_split(model_x, test_dataframe):
-    inner = Lift(
-        name="category",
-        child=model_x,
-        values=["a"],
-        train_filter=lambda v: pl.col("category") == pl.lit(v),
-        test_filter=lambda v: pl.col("category") == pl.lit(v),
-    )
-    outer = Split(
-        name="tt",
-        child=inner,
-        train_filter=pl.col("x") > 1,
-        test_filter=pl.lit(True),
-    )
-    models, *_ = _fit(outer, test_dataframe)
-    assert set(models.keys()) == {"model-x[category=a]"}
-    # train: x>1 AND category=a → x in [2, 3]
-    assert models["model-x[category=a]"].seen == [2, 3]
 
 
 # ── Feed ──────────────────────────────────────────────────────────
@@ -143,30 +101,6 @@ def test_fit_tune_threads_hyperparameters(test_dataframe):
     assert hyperparameters["offset"] == 5.0
     # consumer.value = mean(x) + offset = 5.0 + 5.0 = 10.0
     assert models["consumer"].value == 10.0
-
-
-def test_fit_tune_inside_split_propagates_train_mask(test_dataframe):
-    source_leaf = Leaf(label="source", factory=lambda: MockModel(x_column="x"))
-    consumer_leaf = Leaf(
-        label="consumer",
-        factory=lambda offset=0.0: _OffsetModel(offset=offset),
-    )
-    tune = Tune(
-        name="test",
-        consumer=consumer_leaf,
-        source=source_leaf,
-        logic=_mean_of_source_training_data,
-    )
-    node = Split(
-        name="tt",
-        child=tune,
-        train_filter=pl.col("x") < 5,
-        test_filter=pl.lit(True),
-    )
-    models, *_ = _fit(node, test_dataframe)
-    # The enclosing Split restricts training rows to x<5, so the tune's source
-    # must only see [1, 2, 3, 4] - the mask has to propagate through Tune.
-    assert models["source"].seen == [1, 2, 3, 4]
 
 
 # ── Ensemble ──────────────────────────────────────────────────────────

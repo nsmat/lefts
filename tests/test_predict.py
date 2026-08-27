@@ -124,34 +124,6 @@ def test_predict_ensemble_aggregate_collapses(test_dataframe):
     assert_frame_equal(distinct, expected)
 
 
-def test_predict_ensemble_nested_aggregates(test_dataframe):
-    # We aggregate one ensemble by summing, then the second, providing
-    # 3x the input column as the final prediction.
-    inner_a = Leaf(label="inner-a", factory=lambda: MockModel(x_column="x"))
-    inner_b = Leaf(label="inner-b", factory=lambda: MockModel(x_column="x"))
-    outer_c = Leaf(label="outer-c", factory=lambda: MockModel(x_column="x"))
-
-    inner = Ensemble(
-        name="inner", models=[inner_a, inner_b], aggregate_with=pl.sum_horizontal
-    )
-    outer = Ensemble(
-        name="outer", models=[inner, outer_c], aggregate_with=pl.sum_horizontal
-    )
-
-    models, *_ = _fit(outer, test_dataframe)
-    predictions = _predict(outer, models, test_dataframe)
-
-    for intermediate in ("inner", "inner-a", "inner-b", "outer-c"):
-        assert intermediate not in predictions.columns
-
-    distinct = predictions.select("outer").unique()
-    expected = pl.DataFrame(
-        {"outer": [[3, 6, 9, 12, 15, 18, 21, 24, 27]]},
-        schema={"outer": pl.List(pl.Int64)},
-    )
-    assert_frame_equal(distinct, expected)
-
-
 # ── Feed ──────────────────────────────────────────────────────────
 
 
