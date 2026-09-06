@@ -1,20 +1,3 @@
-"""
-Composition tests: one node wrapping another, exercising fit AND predict together.
-
-Every other test_*.py file tests a single node (or a single interpreter function) in
-isolation. Those pass even when the *seam* between two nodes is broken - the Tune
-train-mask leak was invisible to `test_masks_tune_passthrough` (masks were collected
-correctly) and to `test_fit_tune_threads_hyperparameters` (a bare Tune has no outer
-mask to propagate). This file covers that seam directly: build outer(inner(...)) from
-MockModels, fit it, assert exactly which rows each leaf trained on, then predict and
-assert the values flow through.
-
-MockModel makes this legible: `.seen` is the training data it received, and `.predict`
-echoes that same list back on its test rows, so a single tree tells us both what was
-trained on and how it feeds prediction. The matrix below covers each ordered pair of
-the five transforming nodes (Lift, Split, Ensemble, Feed, Tune) as outer x inner.
-"""
-
 import warnings
 from dataclasses import dataclass
 

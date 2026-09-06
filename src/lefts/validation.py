@@ -40,8 +40,8 @@ def _check_no_lift_above_incompatible_nodes(node: LeftsNode, under_lift: bool) -
     may spread the output of .predict across multiple output columns,
     but feed and tune cannot reference these appropriately.
 
-    A failure to detect this will usually go un-detected by the user
-    with no way to verify whether the behaviour is as intented
+    The user will usually not detect this themselves until fit time,
+    so we guard it during workflow construction
     """
     # TODO Ideally we would allow this behaviour if we could make it safe
     unliftable_nodes = (Feed, Tune)
