@@ -272,27 +272,21 @@ def test_lift_over_feed_is_rejected(test_dataframe):
         )
 
 
-@pytest.mark.xfail(
-    reason="Tune.logic re-roots the source's predict with an empty label_context, so under "
-    "a Lift the source models (stored under decorated labels like 'source[category=a]') "
-    "cannot be found. Known limitation - the label-adding-node-above-Tune analogue of the "
-    "train-mask bug, in the logic path rather than the fit path.",
-    raises=RuntimeError,
-    strict=True,
-)
-def test_lift_over_tune(test_dataframe):
+def test_lift_over_tune_is_rejected(test_dataframe):
+    # Lift-above-Tune is rejected by the validator for the same reason as Lift-above-Feed:
+    # the Tune re-runs its source inside `logic` with an un-decorated label context, which
+    # the Lift's label decoration breaks. Express per-value tuning by Lifting inside source.
     source = leaf(lambda: MockModel(x_column="x"), "source")
     consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
     tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
-    model = lift(
-        tuned,
-        values=["a", "b", "c"],
-        name="category",
-        train_filter=lambda v: pl.col("category") == v,
-        test_filter=lambda v: pl.col("category") == v,
-    )
-    model.fit(test_dataframe)
-    assert model.fitted["source[category=a]"].seen == [1, 2, 3]
+    with pytest.raises(ValueError, match="Lift as an ancestor"):
+        lift(
+            tuned,
+            values=["a", "b", "c"],
+            name="category",
+            train_filter=lambda v: pl.col("category") == v,
+            test_filter=lambda v: pl.col("category") == v,
+        )
 
 
 # ── Ensemble as outer ──────────────────────────────────────────────
