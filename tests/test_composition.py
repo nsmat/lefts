@@ -1,3 +1,23 @@
+"""
+Composition tests: one node wrapping another, exercising fit AND predict together.
+
+Every other test_*.py file tests a single node (or a single interpreter function) in
+isolation. Those pass even when the *seam* between two nodes is broken - the Tune
+train-mask leak was invisible to `test_masks_tune_passthrough` (masks were collected
+correctly) and to `test_fit_tune_threads_hyperparameters` (a bare Tune has no outer
+mask to propagate). This file covers that seam.
+
+It has two layers:
+
+1. An **invariant layer** - three properties that must hold for *any* composed tree,
+   run over a spread of tree shapes. These are absolute and value-free, so a single
+   check catches a whole class of bug across every shape. Built from MockModel-style
+   probes so `.trained_on` is a direct read-out of the rows each leaf actually saw.
+2. A handful of **anchor** tests that pin the exact values the invariants can't
+   express: mask arithmetic, label strings, aggregated outputs, data-flow values,
+   tuned hyperparameters, and the construction guards.
+"""
+
 import warnings
 from dataclasses import dataclass
 
@@ -40,10 +60,266 @@ def _mean_of_t_src(model, df):
 FULL = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
-# ── Split as outer ──────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════
+# Invariant layer
+#
+# Instead of hand-computing an expected value for every (outer, inner) pair, we
+# assert three properties that must hold for *any* composed tree, then run them
+# over a spread of tree shapes. These are absolute and value-free: unlike the
+# commutativity of two orderings (a relative check that can't catch a bug shared
+# by both), a single invariant catches a whole class of bug across every shape -
+# the Tune train-mask leak included. The exact-value anchor tests further down
+# pin the things invariants can't express (mask arithmetic, hyperparameter values,
+# label strings).
+# ══════════════════════════════════════════════════════════════════════
 
 
-def test_split_over_lift_conjoins_masks(test_dataframe):
+@dataclass
+class Probe:
+    """Leaf probe: records the x-values it trained on and echoes them back on predict."""
+
+    trained_on: list = None
+
+    def fit(self, training_set):
+        self.trained_on = training_set["x"].to_list()
+
+    def predict(self, df):
+        return [self.trained_on] * len(df)
+
+
+@dataclass
+class ConsumerProbe:
+    """Feed consumer probe: records its own training rows for the leakage invariant."""
+
+    source_col: str
+    trained_on: list = None
+
+    def fit(self, training_set):
+        self.trained_on = training_set["x"].to_list()
+
+    def predict(self, df):
+        return df[self.source_col].to_list()
+
+
+@dataclass
+class OffsetProbe:
+    """Tune consumer probe: records its own training rows for the leakage invariant."""
+
+    offset: float = 0.0
+    trained_on: list = None
+
+    def fit(self, training_set):
+        self.trained_on = training_set["x"].to_list()
+
+    def predict(self, df):
+        return [self.offset] * len(df)
+
+
+def assert_no_leakage(model, df):
+    """
+    Every leaf trains on exactly the rows its collected train mask permits.
+
+    This cross-checks two independently-computed things that must agree: what `_fit`
+    actually trained each leaf on (`probe.trained_on`) and what `_collect_masks` says
+    it should have (`mark_train_validation_test_rows`). The Tune train-mask leak was
+    precisely a divergence between these two - the seam a single-path test can't see.
+    """
+    marked = model.mark_train_validation_test_rows(df)
+    for label, fitted in model.fitted.items():
+        permitted = set(marked.filter(pl.col(f"{label}__train"))["x"].to_list())
+        assert set(fitted.trained_on) == permitted, (
+            f"{label} trained on {sorted(fitted.trained_on)}, mask permits {sorted(permitted)}"
+        )
+
+
+def assert_predict_replicates_train(model, df):
+    """
+    Each leaf Probe echoes its training data back, and only on its test rows.
+
+    This is the probe contract that makes the other invariants observable - if it
+    holds, a prediction column *is* a faithful read-out of what that leaf trained on.
+    Only applies to plain Probe leaves whose column survives into the output (an
+    aggregation collapses them, a Feed/Tune consumer has a different contract).
+    """
+    marked = model.mark_train_validation_test_rows(df)
+    pred = model.predict(df)
+    for label, fitted in model.fitted.items():
+        if not isinstance(fitted, Probe) or label not in pred.columns:
+            continue
+        emitted = pred.filter(pl.col(label).is_not_null())
+        test_rows = set(marked.filter(pl.col(f"{label}__test"))["x"].to_list())
+        assert set(emitted["x"].to_list()) == test_rows
+        assert all(value == fitted.trained_on for value in emitted[label].to_list())
+
+
+def assert_labels_match_columns(model, df):
+    """The public label set is exactly the set of columns predict adds to the frame."""
+    produced = set(model.predict(df).columns) - set(df.columns)
+    assert produced == set(model.collect_labels())
+
+
+def _cat_lift(model):
+    """A three-way Lift over `category` where each value trains and tests on its own rows."""
+    return lift(
+        model,
+        values=["a", "b", "c"],
+        name="category",
+        train_filter=lambda v: pl.col("category") == v,
+        test_filter=lambda v: pl.col("category") == v,
+    )
+
+
+def _shapes():
+    """A spread of composed trees (built from probes) to run every invariant over."""
+    return {
+        "leaf": lambda: leaf(lambda: Probe(), "m"),
+        "split_over_lift": lambda: split(
+            "tt", _cat_lift(leaf(lambda: Probe(), "m")),
+            train_filter=(pl.col("x") % 3) != 0, test_filter=(pl.col("x") % 3) == 0,
+        ),
+        "lift_over_split": lambda: _cat_lift(
+            split("tt", leaf(lambda: Probe(), "m"),
+                  train_filter=(pl.col("x") % 3) != 0, test_filter=(pl.col("x") % 3) == 0)
+        ),
+        "lift_over_lift": lambda: lift(
+            _cat_lift(leaf(lambda: Probe(), "m")),
+            values=[0, 1], name="parity",
+            train_filter=lambda v: (pl.col("x") % 2) == v,
+            test_filter=lambda v: (pl.col("x") % 2) == v,
+        ),
+        "split_over_split": lambda: split(
+            "outer",
+            split("inner", leaf(lambda: Probe(), "m"),
+                  train_filter=pl.col("x") >= 3, test_filter=pl.lit(True)),
+            train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7,
+        ),
+        "split_over_ensemble": lambda: split(
+            "tt", ensemble("ens", leaf(lambda: Probe(), "m-a"), leaf(lambda: Probe(), "m-b")),
+            train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7,
+        ),
+        "lift_over_ensemble": lambda: _cat_lift(
+            ensemble("ens", leaf(lambda: Probe(), "m-a"), leaf(lambda: Probe(), "m-b"))
+        ),
+        "ensemble_over_split": lambda: ensemble(
+            "ens",
+            split("tt", leaf(lambda: Probe(), "m"),
+                  train_filter=pl.col("x") <= 4, test_filter=pl.col("x") >= 5),
+            leaf(lambda: Probe(), "solo"),
+        ),
+        "nested_ensemble_aggregate": lambda: ensemble(
+            "outer",
+            ensemble("inner", leaf(lambda: Probe(), "inner-a"), leaf(lambda: Probe(), "inner-b"),
+                     aggregate_with=pl.sum_horizontal),
+            leaf(lambda: Probe(), "outer-c"),
+            aggregate_with=pl.sum_horizontal,
+        ),
+        "lift_coalesce_oof": lambda: lift(
+            leaf(lambda: Probe(), "teacher"),
+            values=[0, 1, 2], name="cv",
+            train_filter=lambda v: pl.col("fold") != v,
+            test_filter=lambda v: pl.col("fold") == v,
+            aggregate_with=pl.coalesce,
+        ),
+        "split_over_feed": lambda: split(
+            "tt",
+            feed("d", source=leaf(lambda: Probe(), "src"),
+                 consumer=leaf(lambda: ConsumerProbe(source_col="src"), "cons")),
+            train_filter=pl.col("x") < 5, test_filter=pl.col("x") >= 5,
+        ),
+        "split_over_tune": lambda: split(
+            "tt",
+            tune("tn", source=leaf(lambda: Probe(), "source"),
+                 consumer=leaf(lambda offset=0.0: OffsetProbe(offset=offset), "consumer"),
+                 logic=lambda m, df: {"offset": 3.0}),
+            train_filter=pl.col("x") < 5, test_filter=pl.col("x") >= 5,
+        ),
+        "ensemble_over_tune": lambda: ensemble(
+            "ens",
+            tune("tn", source=leaf(lambda: Probe(), "source"),
+                 consumer=leaf(lambda offset=0.0: OffsetProbe(offset=offset), "consumer"),
+                 logic=lambda m, df: {"offset": 3.0}),
+            leaf(lambda: Probe(), "solo"),
+        ),
+        "feed_source_split": lambda: feed(
+            "d",
+            source=split("src_tt", leaf(lambda: Probe(), "src"),
+                         train_filter=pl.col("x") <= 4, test_filter=pl.lit(True)),
+            consumer=leaf(lambda: ConsumerProbe(source_col="src"), "cons"),
+        ),
+        "feed_source_lift_crossfit": lambda: feed(
+            "d",
+            source=lift(leaf(lambda: Probe(), "teacher"),
+                        values=[0, 1, 2], name="cv_teacher",
+                        train_filter=lambda v: pl.col("fold") != v,
+                        test_filter=lambda v: pl.col("fold") == v,
+                        aggregate_with=pl.coalesce),
+            consumer=leaf(lambda: ConsumerProbe(source_col="cv_teacher"), "student"),
+        ),
+        "tune_source_lift": lambda: tune(
+            "tn",
+            source=_cat_lift(leaf(lambda: Probe(), "s")),
+            consumer=leaf(lambda offset=0.0: OffsetProbe(offset=offset), "c"),
+            logic=lambda m, df: {"offset": 3.0},
+        ),
+        "tune_source_feed": lambda: tune(
+            "tn",
+            source=feed("d", source=leaf(lambda: Probe(), "fs"),
+                        consumer=leaf(lambda: ConsumerProbe(source_col="fs"), "fc")),
+            consumer=leaf(lambda offset=0.0: OffsetProbe(offset=offset), "c"),
+            logic=lambda m, df: {"offset": 3.0},
+        ),
+        "feed_source_tune": lambda: feed(
+            "d",
+            source=tune("tn", source=leaf(lambda: Probe(), "t_src"),
+                        consumer=leaf(lambda offset=0.0: OffsetProbe(offset=offset), "teacher"),
+                        logic=lambda m, df: {"offset": 3.0}),
+            consumer=leaf(lambda: ConsumerProbe(source_col="teacher"), "student"),
+        ),
+    }
+
+
+_SHAPES = _shapes()
+
+
+@pytest.mark.parametrize("shape", _SHAPES, ids=list(_SHAPES))
+def test_invariant_no_leakage(shape, test_dataframe):
+    model = _SHAPES[shape]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # NaN-augmentation warnings are orthogonal here
+        model.fit(test_dataframe)
+    assert_no_leakage(model, test_dataframe)
+
+
+@pytest.mark.parametrize("shape", _SHAPES, ids=list(_SHAPES))
+def test_invariant_predict_replicates_train(shape, test_dataframe):
+    model = _SHAPES[shape]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model.fit(test_dataframe)
+    assert_predict_replicates_train(model, test_dataframe)
+
+
+@pytest.mark.parametrize("shape", _SHAPES, ids=list(_SHAPES))
+def test_invariant_labels_match_columns(shape, test_dataframe):
+    model = _SHAPES[shape]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model.fit(test_dataframe)
+    assert_labels_match_columns(model, test_dataframe)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Anchors
+#
+# Absolute, hand-computed values the invariants above cannot express. Each pins one
+# thing: without at least one anchor, the invariants only prove the tree is *self
+# consistent* (e.g. training data matches the collected mask) - not that the mask,
+# label, or aggregated value is itself correct.
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_anchor_mask_conjunction(test_dataframe):
+    # Pins the exact mask arithmetic: Split's filter conjoined with each Lift value's.
     m = leaf(lambda: MockModel(x_column="x"), "m")
     lifted = lift(
         m,
@@ -72,124 +348,8 @@ def test_split_over_lift_conjoins_masks(test_dataframe):
     assert pred["m[category=c]"].drop_nulls().to_list() == [[7, 8]]
 
 
-def test_split_over_split_conjoins_masks(test_dataframe):
-    m = leaf(lambda: MockModel(x_column="x"), "m")
-    inner = split("inner", m, train_filter=pl.col("x") >= 3, test_filter=pl.lit(True))
-    model = split("outer", inner, train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7)
-    model.fit(test_dataframe)
-
-    # train = (x <= 6) & (x >= 3)
-    assert model.fitted["m"].seen == [3, 4, 5, 6]
-
-    pred = model.predict(test_dataframe)
-    # test = (x >= 7) & True
-    assert pred["m"].drop_nulls().to_list() == [[3, 4, 5, 6]] * 3
-
-
-def test_split_over_ensemble_applies_to_each_member(test_dataframe):
-    a = leaf(lambda: MockModel(x_column="x"), "m-a")
-    b = leaf(lambda: MockModel(x_column="x"), "m-b")
-    model = split(
-        "tt", ensemble("ens", a, b), train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7
-    )
-    model.fit(test_dataframe)
-
-    assert model.fitted["m-a"].seen == [1, 2, 3, 4, 5, 6]
-    assert model.fitted["m-b"].seen == [1, 2, 3, 4, 5, 6]
-
-    pred = model.predict(test_dataframe)
-    assert pred["m-a"].drop_nulls().to_list() == [[1, 2, 3, 4, 5, 6]] * 3
-    assert pred["m-b"].drop_nulls().to_list() == [[1, 2, 3, 4, 5, 6]] * 3
-
-
-def test_split_over_feed_no_leakage(test_dataframe):
-    src = leaf(lambda: MockModel(x_column="x"), "src")
-    cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
-    model = split(
-        "tt",
-        feed("d", source=src, consumer=cons),
-        train_filter=pl.col("x") < 5,
-        test_filter=pl.col("x") >= 5,
-    )
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # NaN-augmentation warning is expected here
-        model.fit(test_dataframe)
-
-    # Source's training data is exactly the Split's train rows; nothing leaked in.
-    assert model.fitted["src"].seen == [1, 2, 3, 4]
-
-    predictions = model.predict(test_dataframe)
-    distinct = (
-        predictions.with_columns(in_test=pl.col("x") >= 5)
-        .select("in_test", "src", "cons")
-        .unique(subset=["in_test"], maintain_order=True)
-    )
-    expected = pl.DataFrame(
-        {
-            "in_test": [False, True],
-            "src": [None, [1, 2, 3, 4]],
-            "cons": [None, [1, 2, 3, 4]],
-        },
-        schema={
-            "in_test": pl.Boolean,
-            "src": pl.List(pl.Int64),
-            "cons": pl.List(pl.Int64),
-        },
-    )
-    assert_frame_equal(distinct, expected)
-
-
-def test_split_over_tune_propagates_train_mask(test_dataframe):
-    # Regression test for the Tune train-mask leak: the enclosing Split restricts
-    # training rows to x < 5, so the source must only see [1, 2, 3, 4]. Before the
-    # fix the Tune re-rooted its source fit and trained on all nine rows.
-    source = leaf(lambda: MockModel(x_column="x"), "source")
-    consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
-    tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
-    model = split("tt", tuned, train_filter=pl.col("x") < 5, test_filter=pl.col("x") >= 5)
-    model.fit(test_dataframe)
-
-    assert model.fitted["source"].seen == [1, 2, 3, 4]
-    # logic reads the (unrestricted) source predictions -> mean([1,2,3,4]) = 2.5
-    assert model.hyperparameters["offset"] == 2.5
-    # consumer trains on x < 5: mean([1,2,3,4]) + 2.5 = 5.0
-    assert model.fitted["consumer"].value == 5.0
-
-    pred = model.predict(test_dataframe)
-    assert pred["source"].drop_nulls().to_list() == [[1, 2, 3, 4]] * 5
-    assert pred["consumer"].drop_nulls().to_list() == [5.0] * 5
-
-
-# ── Lift as outer ──────────────────────────────────────────────────
-
-
-def test_lift_over_split_conjoins_masks(test_dataframe):
-    # Same leaf masks as test_split_over_lift - Lift and Split commute.
-    m = leaf(lambda: MockModel(x_column="x"), "m")
-    inner = split(
-        "tt", m, train_filter=(pl.col("x") % 3) != 0, test_filter=(pl.col("x") % 3) == 0
-    )
-    model = lift(
-        inner,
-        values=["a", "b", "c"],
-        name="category",
-        train_filter=lambda v: pl.col("category") == v,
-        test_filter=lambda v: pl.col("category") == v,
-    )
-    model.fit(test_dataframe)
-
-    assert model.fitted["m[category=a]"].seen == [1, 2]
-    assert model.fitted["m[category=b]"].seen == [4, 5]
-    assert model.fitted["m[category=c]"].seen == [7, 8]
-
-    pred = model.predict(test_dataframe)
-    assert pred["m[category=a]"].drop_nulls().to_list() == [[1, 2]]
-    assert pred["m[category=b]"].drop_nulls().to_list() == [[4, 5]]
-    assert pred["m[category=c]"].drop_nulls().to_list() == [[7, 8]]
-
-
-def test_lift_over_lift_composes_dimensions(test_dataframe):
+def test_anchor_nested_lift_labels(test_dataframe):
+    # Pins the exact label strings a double-Lift produces (outer dimension first).
     m = leaf(lambda: MockModel(x_column="x"), "m")
     inner = lift(
         m,
@@ -207,7 +367,6 @@ def test_lift_over_lift_composes_dimensions(test_dataframe):
     )
     model.fit(test_dataframe)
 
-    # train = (x % 2 == parity) & (category == v); outer dimension comes first in the label
     assert model.fitted["m[parity=0, category=a]"].seen == [2]
     assert model.fitted["m[parity=0, category=b]"].seen == [4, 6]
     assert model.fitted["m[parity=0, category=c]"].seen == [8]
@@ -220,100 +379,8 @@ def test_lift_over_lift_composes_dimensions(test_dataframe):
     assert pred["m[parity=1, category=c]"].drop_nulls().to_list() == [[7, 9]] * 2
 
 
-def test_lift_over_ensemble_distributes(test_dataframe):
-    a = leaf(lambda: MockModel(x_column="x"), "m-a")
-    b = leaf(lambda: MockModel(x_column="x"), "m-b")
-    model = lift(
-        ensemble("ens", a, b),
-        values=["a", "b", "c"],
-        name="category",
-        train_filter=lambda v: pl.col("category") == v,
-        test_filter=lambda v: pl.col("category") == v,
-    )
-    model.fit(test_dataframe)
-
-    assert model.fitted["m-a[category=a]"].seen == [1, 2, 3]
-    assert model.fitted["m-b[category=c]"].seen == [7, 8, 9]
-
-    pred = model.predict(test_dataframe)
-    assert pred["m-a[category=b]"].drop_nulls().to_list() == [[4, 5, 6]] * 3
-    assert pred["m-b[category=a]"].drop_nulls().to_list() == [[1, 2, 3]] * 3
-
-
-def test_lift_over_feed_is_rejected(test_dataframe):
-    # Lift-above-Feed is structurally rejected by the validator at construction time.
-    src = leaf(lambda: MockModel(x_column="x"), "src")
-    cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
-    fed = feed("d", source=src, consumer=cons)
-    with pytest.raises(ValueError, match="Lift as an ancestor"):
-        lift(
-            fed,
-            values=["a", "b", "c"],
-            name="category",
-            train_filter=lambda v: pl.col("category") == v,
-            test_filter=lambda v: pl.col("category") == v,
-        )
-
-
-def test_lift_over_tune_is_rejected(test_dataframe):
-    # Lift-above-Tune is rejected by the validator for the same reason as Lift-above-Feed:
-    # the Tune re-runs its source inside `logic` with an un-decorated label context, which
-    # the Lift's label decoration breaks. Express per-value tuning by Lifting inside source.
-    source = leaf(lambda: MockModel(x_column="x"), "source")
-    consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
-    tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
-    with pytest.raises(ValueError, match="Lift as an ancestor"):
-        lift(
-            tuned,
-            values=["a", "b", "c"],
-            name="category",
-            train_filter=lambda v: pl.col("category") == v,
-            test_filter=lambda v: pl.col("category") == v,
-        )
-
-
-# ── Ensemble as outer ──────────────────────────────────────────────
-
-
-def test_ensemble_over_lift(test_dataframe):
-    m = leaf(lambda: MockModel(x_column="x"), "m")
-    lifted = lift(
-        m,
-        values=["a", "b", "c"],
-        name="category",
-        train_filter=lambda v: pl.col("category") == v,
-        test_filter=lambda v: pl.col("category") == v,
-    )
-    solo = leaf(lambda: MockModel(x_column="x"), "solo")
-    model = ensemble("ens", lifted, solo)
-    model.fit(test_dataframe)
-
-    assert model.fitted["m[category=a]"].seen == [1, 2, 3]
-    assert model.fitted["m[category=c]"].seen == [7, 8, 9]
-    assert model.fitted["solo"].seen == FULL
-
-    pred = model.predict(test_dataframe)
-    assert pred["m[category=b]"].drop_nulls().to_list() == [[4, 5, 6]] * 3
-    assert pred["solo"].drop_nulls().to_list() == [FULL] * 9
-
-
-def test_ensemble_over_split(test_dataframe):
-    m = leaf(lambda: MockModel(x_column="x"), "m")
-    bounded = split("tt", m, train_filter=pl.col("x") <= 4, test_filter=pl.col("x") >= 5)
-    solo = leaf(lambda: MockModel(x_column="x"), "solo")
-    model = ensemble("ens", bounded, solo)
-    model.fit(test_dataframe)
-
-    assert model.fitted["m"].seen == [1, 2, 3, 4]
-    assert model.fitted["solo"].seen == FULL
-
-    pred = model.predict(test_dataframe)
-    assert pred["m"].drop_nulls().to_list() == [[1, 2, 3, 4]] * 5
-    assert pred["solo"].drop_nulls().to_list() == [FULL] * 9
-
-
-def test_ensemble_over_ensemble_nested_aggregation(test_dataframe):
-    # Sum the inner ensemble, then sum that into the outer ensemble -> 3x the input.
+def test_anchor_nested_aggregation_values(test_dataframe):
+    # Pins the aggregated output: sum the inner ensemble, then the outer -> 3x the input.
     inner_a = leaf(lambda: MockModel(x_column="x"), "inner-a")
     inner_b = leaf(lambda: MockModel(x_column="x"), "inner-b")
     outer_c = leaf(lambda: MockModel(x_column="x"), "outer-c")
@@ -335,49 +402,10 @@ def test_ensemble_over_ensemble_nested_aggregation(test_dataframe):
     assert_frame_equal(distinct, expected)
 
 
-def test_ensemble_over_feed(test_dataframe):
-    src = leaf(lambda: MockModel(x_column="x"), "src")
-    cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
-    fed = feed("d", source=src, consumer=cons)
-    solo = leaf(lambda: MockModel(x_column="x"), "solo")
-    model = ensemble("ens", fed, solo)
-    model.fit(test_dataframe)
-
-    assert model.fitted["src"].seen == FULL
-    assert model.fitted["cons"].seen == [FULL]
-    assert model.fitted["solo"].seen == FULL
-
-    pred = model.predict(test_dataframe)
-    assert pred["src"].drop_nulls().to_list() == [FULL] * 9
-    assert pred["cons"].drop_nulls().to_list() == [FULL] * 9
-    assert pred["solo"].drop_nulls().to_list() == [FULL] * 9
-
-
-def test_ensemble_over_tune(test_dataframe):
-    source = leaf(lambda: MockModel(x_column="x"), "source")
-    consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
-    tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
-    solo = leaf(lambda: MockModel(x_column="x"), "solo")
-    model = ensemble("ens", tuned, solo)
-    model.fit(test_dataframe)
-
-    assert model.fitted["source"].seen == FULL
-    assert model.hyperparameters["offset"] == 5.0  # mean([1..9])
-    assert model.fitted["consumer"].value == 10.0  # mean([1..9]) + 5.0
-    assert model.fitted["solo"].seen == FULL
-
-    pred = model.predict(test_dataframe)
-    assert pred["consumer"].drop_nulls().to_list() == [10.0] * 9
-    assert pred["solo"].drop_nulls().to_list() == [FULL] * 9
-
-
-# ── Feed as outer (inner node in the source) ───────────────────────
-
-
-def test_feed_with_lift_in_source_and_consumer(test_dataframe):
-    # CV cross-fitting via Lift inside source: each teacher fold trains on `fold != v`
-    # and predicts on `fold == v`; the coalesce produces out-of-fold predictions
-    # covering all rows, which the student then consumes.
+def test_anchor_feed_crossfit_dataflow(test_dataframe):
+    # Pins the Feed data-flow: the student actually receives the teacher's OOF predictions.
+    # CV cross-fitting via Lift inside source - each teacher fold trains on `fold != v` and
+    # predicts on `fold == v`; the coalesce produces OOF predictions covering all rows.
     teacher = leaf(lambda: MockModel(x_column="x"), "teacher")
     student = leaf(lambda: ConsumerModel(source_col="cv_teacher"), "student")
 
@@ -447,64 +475,29 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
     assert_frame_equal(distinct, expected)
 
 
-def test_feed_with_split_in_source(test_dataframe):
-    src = leaf(lambda: MockModel(x_column="x"), "src")
-    bounded = split("src_tt", src, train_filter=pl.col("x") <= 4, test_filter=pl.lit(True))
-    cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
-    model = feed("d", source=bounded, consumer=cons)
+def test_anchor_tune_propagates_train_mask_and_hyperparameter(test_dataframe):
+    # Named regression for the Tune train-mask leak, and pins the tuned hyperparameter
+    # arithmetic: the enclosing Split restricts training to x < 5, so the source sees
+    # only [1, 2, 3, 4]; before the fix the Tune re-rooted and trained on all nine rows.
+    source = leaf(lambda: MockModel(x_column="x"), "source")
+    consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
+    tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
+    model = split("tt", tuned, train_filter=pl.col("x") < 5, test_filter=pl.col("x") >= 5)
+    model.fit(test_dataframe)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # source test covers all rows -> no NaN/leak warning
-        model.fit(test_dataframe)
-
-    assert model.fitted["src"].seen == [1, 2, 3, 4]
-    assert model.fitted["cons"].seen == [[1, 2, 3, 4]]
-
-    pred = model.predict(test_dataframe)
-    assert pred["src"].drop_nulls().to_list() == [[1, 2, 3, 4]] * 9
-    assert pred["cons"].drop_nulls().to_list() == [[1, 2, 3, 4]] * 9
-
-
-def test_feed_with_ensemble_in_source(test_dataframe):
-    s1 = leaf(lambda: MockModel(x_column="x"), "s1")
-    s2 = leaf(lambda: MockModel(x_column="x"), "s2")
-    src = ensemble("src_ens", s1, s2)
-    cons = leaf(lambda: ConsumerModel(source_col="s1"), "cons")
-    model = feed("d", source=src, consumer=cons)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        model.fit(test_dataframe)
-
-    assert model.fitted["s1"].seen == FULL
-    assert model.fitted["s2"].seen == FULL
-    assert model.fitted["cons"].seen == [FULL]
+    assert model.fitted["source"].seen == [1, 2, 3, 4]
+    # logic reads the (unrestricted) source predictions -> mean([1,2,3,4]) = 2.5
+    assert model.hyperparameters["offset"] == 2.5
+    # consumer trains on x < 5: mean([1,2,3,4]) + 2.5 = 5.0
+    assert model.fitted["consumer"].value == 5.0
 
     pred = model.predict(test_dataframe)
-    assert pred["cons"].drop_nulls().to_list() == [FULL] * 9
+    assert pred["source"].drop_nulls().to_list() == [[1, 2, 3, 4]] * 5
+    assert pred["consumer"].drop_nulls().to_list() == [5.0] * 5
 
 
-def test_feed_with_feed_in_source(test_dataframe):
-    a = leaf(lambda: MockModel(x_column="x"), "a")
-    b = leaf(lambda: ConsumerModel(source_col="a"), "b")
-    inner = feed("inner", source=a, consumer=b)
-    c = leaf(lambda: ConsumerModel(source_col="b"), "c")
-    model = feed("outer", source=inner, consumer=c)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        model.fit(test_dataframe)
-
-    assert model.fitted["a"].seen == FULL
-    assert model.fitted["b"].seen == [FULL]
-    assert model.fitted["c"].seen == [FULL]
-
-    pred = model.predict(test_dataframe)
-    assert pred["c"].drop_nulls().to_list() == [FULL] * 9
-
-
-def test_feed_with_tune_in_source(test_dataframe):
-    # "Tune the teacher": the teacher is tuned, then feeds a student.
+def test_anchor_tune_the_teacher(test_dataframe):
+    # Pins the canonical "tune the teacher" integration: a tuned teacher feeds a student.
     t_src = leaf(lambda: MockModel(x_column="x"), "t_src")
     teacher = leaf(lambda offset=0.0: OffsetModel(offset=offset), "teacher")
     tuned = tune("tn", consumer=teacher, source=t_src, logic=_mean_of_t_src)
@@ -516,100 +509,40 @@ def test_feed_with_tune_in_source(test_dataframe):
         model.fit(test_dataframe)
 
     assert model.fitted["t_src"].seen == FULL
-    assert model.hyperparameters["offset"] == 5.0
-    assert model.fitted["teacher"].value == 10.0
+    assert model.hyperparameters["offset"] == 5.0  # mean([1..9])
+    assert model.fitted["teacher"].value == 10.0  # mean([1..9]) + 5.0
     assert model.fitted["student"].seen == [10.0]
 
     pred = model.predict(test_dataframe)
     assert pred["student"].drop_nulls().to_list() == [10.0] * 9
 
 
-# ── Tune as outer (inner node in the source) ───────────────────────
-#
-# These use a constant `logic` so the assertions isolate mask/data propagation into
-# the source and hyperparameter propagation into the consumer, not the logic arithmetic.
+def test_anchor_lift_over_feed_is_rejected(test_dataframe):
+    # Lift-above-Feed is structurally rejected by the validator at construction time.
+    src = leaf(lambda: MockModel(x_column="x"), "src")
+    cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
+    fed = feed("d", source=src, consumer=cons)
+    with pytest.raises(ValueError, match="Lift as an ancestor"):
+        lift(
+            fed,
+            values=["a", "b", "c"],
+            name="category",
+            train_filter=lambda v: pl.col("category") == v,
+            test_filter=lambda v: pl.col("category") == v,
+        )
 
 
-def test_tune_with_lift_in_source(test_dataframe):
-    s = leaf(lambda: MockModel(x_column="x"), "s")
-    lifted = lift(
-        s,
-        values=["a", "b", "c"],
-        name="category",
-        train_filter=lambda v: pl.col("category") == v,
-        test_filter=lambda v: pl.col("category") == v,
-    )
-    c = leaf(lambda offset=0.0: OffsetModel(offset=offset), "c")
-    model = tune("tn", consumer=c, source=lifted, logic=lambda m, df: {"offset": 3.0})
-    model.fit(test_dataframe)
-
-    assert model.fitted["s[category=a]"].seen == [1, 2, 3]
-    assert model.fitted["s[category=c]"].seen == [7, 8, 9]
-    assert model.fitted["c"].value == 8.0  # mean([1..9]) + 3.0
-
-    pred = model.predict(test_dataframe)
-    assert pred["s[category=b]"].drop_nulls().to_list() == [[4, 5, 6]] * 3
-    assert pred["c"].drop_nulls().to_list() == [8.0] * 9
-
-
-def test_tune_with_split_in_source(test_dataframe):
-    s = leaf(lambda: MockModel(x_column="x"), "s")
-    bounded = split("src_tt", s, train_filter=pl.col("x") <= 4, test_filter=pl.lit(True))
-    c = leaf(lambda offset=0.0: OffsetModel(offset=offset), "c")
-    model = tune("tn", consumer=c, source=bounded, logic=lambda m, df: {"offset": 3.0})
-    model.fit(test_dataframe)
-
-    assert model.fitted["s"].seen == [1, 2, 3, 4]
-    assert model.fitted["c"].value == 8.0
-
-    pred = model.predict(test_dataframe)
-    assert pred["s"].drop_nulls().to_list() == [[1, 2, 3, 4]] * 9
-    assert pred["c"].drop_nulls().to_list() == [8.0] * 9
-
-
-def test_tune_with_ensemble_in_source(test_dataframe):
-    s1 = leaf(lambda: MockModel(x_column="x"), "s1")
-    s2 = leaf(lambda: MockModel(x_column="x"), "s2")
-    src = ensemble("src_ens", s1, s2)
-    c = leaf(lambda offset=0.0: OffsetModel(offset=offset), "c")
-    model = tune("tn", consumer=c, source=src, logic=lambda m, df: {"offset": 3.0})
-    model.fit(test_dataframe)
-
-    assert model.fitted["s1"].seen == FULL
-    assert model.fitted["s2"].seen == FULL
-    assert model.fitted["c"].value == 8.0
-
-    pred = model.predict(test_dataframe)
-    assert pred["c"].drop_nulls().to_list() == [8.0] * 9
-
-
-def test_tune_with_feed_in_source(test_dataframe):
-    fs = leaf(lambda: MockModel(x_column="x"), "fs")
-    fc = leaf(lambda: ConsumerModel(source_col="fs"), "fc")
-    fed = feed("d", source=fs, consumer=fc)
-    c = leaf(lambda offset=0.0: OffsetModel(offset=offset), "c")
-    model = tune("tn", consumer=c, source=fed, logic=lambda m, df: {"offset": 3.0})
-    model.fit(test_dataframe)
-
-    assert model.fitted["fs"].seen == FULL
-    assert model.fitted["fc"].seen == [FULL]
-    assert model.fitted["c"].value == 8.0
-
-    pred = model.predict(test_dataframe)
-    assert pred["c"].drop_nulls().to_list() == [8.0] * 9
-
-
-def test_tune_with_tune_in_source(test_dataframe):
-    inner_src = leaf(lambda: MockModel(x_column="x"), "is")
-    ic = leaf(lambda offset=0.0: OffsetModel(offset=offset), "ic")
-    inner = tune("inner", consumer=ic, source=inner_src, logic=lambda m, df: {"offset": 2.0})
-    oc = leaf(lambda offset=0.0: OffsetModel(offset=offset), "oc")
-    model = tune("outer", consumer=oc, source=inner, logic=lambda m, df: {"offset": 3.0})
-    model.fit(test_dataframe)
-
-    assert model.fitted["is"].seen == FULL
-    assert model.fitted["ic"].value == 7.0  # mean([1..9]) + 2.0 (inner offset)
-    assert model.fitted["oc"].value == 8.0  # mean([1..9]) + 3.0 (outer offset)
-
-    pred = model.predict(test_dataframe)
-    assert pred["oc"].drop_nulls().to_list() == [8.0] * 9
+def test_anchor_lift_over_tune_is_rejected(test_dataframe):
+    # Lift-above-Tune is rejected for the same reason as Lift-above-Feed: the Tune re-runs
+    # its source inside `logic` with an un-decorated label context, which the Lift breaks.
+    source = leaf(lambda: MockModel(x_column="x"), "source")
+    consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
+    tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
+    with pytest.raises(ValueError, match="Lift as an ancestor"):
+        lift(
+            tuned,
+            values=["a", "b", "c"],
+            name="category",
+            train_filter=lambda v: pl.col("category") == v,
+            test_filter=lambda v: pl.col("category") == v,
+        )
