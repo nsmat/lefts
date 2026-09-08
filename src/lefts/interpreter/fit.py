@@ -209,8 +209,13 @@ def _fit(
                 fitted_models |= source_models
             else:
                 tune_model = _Model(source, source_models, learned_hyperparameters)
-                learned_hyperparameters |= logic(tune_model, df)
+                tuned_hyperparameters = logic(tune_model, df)
 
+                # The consumer sees the hyperparameters flowing in from above merged
+                # with the ones this Tune just learned - NOT the source subtree's own
+                # learned hyperparameters. Seeding from `learned_hyperparameters` (the
+                # source's output) would leak a nested source-Tune's parameters into
+                # this consumer and drop the inherited ones (see Hyperparameter scope).
                 (
                     consumer_models,
                     consumer_hyperparameters,
@@ -219,7 +224,7 @@ def _fit(
                 ) = _fit(
                     consumer,
                     df,
-                    learned_hyperparameters,
+                    hyperparameters | tuned_hyperparameters,
                     label_context,
                     False,
                     precomputed_masks,
@@ -228,7 +233,9 @@ def _fit(
                 )
                 fitted_models |= source_models | consumer_models
                 output_hyperparameters |= (
-                    consumer_hyperparameters | learned_hyperparameters
+                    consumer_hyperparameters
+                    | learned_hyperparameters
+                    | tuned_hyperparameters
                 )
                 logs |= consumer_logs
                 exceptions |= consumer_exceptions

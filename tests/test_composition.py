@@ -27,6 +27,23 @@ class OffsetModel:
         return [self.value] * len(df)
 
 
+@dataclass
+class HyperparameterRecorder:
+    """Records exactly the hyperparameters its factory received - for Tune scope tests."""
+
+    received: dict
+
+    def fit(self, training_set):
+        pass
+
+    def predict(self, df):
+        return [0.0] * len(df)
+
+
+def _recorder(name):
+    return leaf(lambda **received: HyperparameterRecorder(received=received), name)
+
+
 def _mean_of_source(model, df):
     """Tune logic: read the source's predictions off the `source` column."""
     return {"offset": model.predict(df)["source"].list.mean().first()}
@@ -525,10 +542,7 @@ def test_feed_with_tune_in_source(test_dataframe):
 
 
 # ── Tune as outer (inner node in the source) ───────────────────────
-#
-# These use a constant `logic` so the assertions isolate mask/data propagation into
-# the source and hyperparameter propagation into the consumer, not the logic arithmetic.
-
+# All tunes use a shared 'offset' logic
 
 def test_tune_with_lift_in_source(test_dataframe):
     s = leaf(lambda: MockModel(x_column="x"), "s")
@@ -613,3 +627,60 @@ def test_tune_with_tune_in_source(test_dataframe):
 
     pred = model.predict(test_dataframe)
     assert pred["oc"].drop_nulls().to_list() == [8.0] * 9
+
+
+# ── Tune hyperparameter scope ──────────────────────────────────────
+#
+# A Tune's learned hyperparameters apply to its consumer (learner) subtree only.
+# These use distinct keys so a leak is visible - a shared key would mask it.
+
+
+def test_tune_hyperparameter_reaches_consumer_not_source_or_sibling(test_dataframe):
+    tuned = tune(
+        "tn",
+        consumer=_recorder("consumer"),
+        source=_recorder("source"),
+        logic=lambda m, df: {"learned": 7.0},
+    )
+    model = ensemble("ens", tuned, _recorder("sibling"))
+    model.fit(test_dataframe)
+
+    assert model.fitted["consumer"].received == {"learned": 7.0}
+    assert model.fitted["source"].received == {}  # source is fit before logic runs
+    assert model.fitted["sibling"].received == {}  # scope does not cross to siblings
+
+
+def test_source_tune_hyperparameter_does_not_leak_up(test_dataframe):
+    # Inner Tune sits in the outer Tune's SOURCE: its learned `inner_p` must stay scoped
+    # to the inner consumer and not reach the outer consumer.
+    inner = tune(
+        "inner", consumer=_recorder("ic"), source=_recorder("is"),
+        logic=lambda m, df: {"inner_p": 2.0},
+    )
+    outer = tune(
+        "outer", consumer=_recorder("oc"), source=inner,
+        logic=lambda m, df: {"outer_p": 3.0},
+    )
+    outer.fit(test_dataframe)
+
+    assert outer.fitted["oc"].received == {"outer_p": 3.0}  # inner_p must not leak up
+    assert outer.fitted["ic"].received == {"inner_p": 2.0}
+    assert outer.fitted["is"].received == {}
+
+
+def test_learner_tune_inherits_outer_hyperparameter(test_dataframe):
+    # Inner Tune sits in the outer Tune's LEARNER: it inherits the outer's `outer_p`
+    # across its whole subtree, on top of its own `inner_p`.
+    inner = tune(
+        "inner", consumer=_recorder("ic"), source=_recorder("is"),
+        logic=lambda m, df: {"inner_p": 2.0},
+    )
+    outer = tune(
+        "outer", consumer=inner, source=_recorder("os"),
+        logic=lambda m, df: {"outer_p": 3.0},
+    )
+    outer.fit(test_dataframe)
+
+    assert outer.fitted["ic"].received == {"outer_p": 3.0, "inner_p": 2.0}
+    assert outer.fitted["is"].received == {"outer_p": 3.0}  # inherited, before inner learns
+    assert outer.fitted["os"].received == {}  # outer source sees nothing learned
