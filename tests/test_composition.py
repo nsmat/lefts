@@ -92,7 +92,9 @@ def test_split_over_lift_conjoins_masks(test_dataframe):
 def test_split_over_split_conjoins_masks(test_dataframe):
     m = leaf(lambda: MockModel(x_column="x"), "m")
     inner = split("inner", m, train_filter=pl.col("x") >= 3, test_filter=pl.lit(True))
-    model = split("outer", inner, train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7)
+    model = split(
+        "outer", inner, train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7
+    )
     model.fit(test_dataframe)
 
     # train = (x <= 6) & (x >= 3)
@@ -107,7 +109,10 @@ def test_split_over_ensemble_applies_to_each_member(test_dataframe):
     a = leaf(lambda: MockModel(x_column="x"), "m-a")
     b = leaf(lambda: MockModel(x_column="x"), "m-b")
     model = split(
-        "tt", ensemble("ens", a, b), train_filter=pl.col("x") <= 6, test_filter=pl.col("x") >= 7
+        "tt",
+        ensemble("ens", a, b),
+        train_filter=pl.col("x") <= 6,
+        test_filter=pl.col("x") >= 7,
     )
     model.fit(test_dataframe)
 
@@ -164,7 +169,9 @@ def test_split_over_tune_propagates_train_mask(test_dataframe):
     source = leaf(lambda: MockModel(x_column="x"), "source")
     consumer = leaf(lambda offset=0.0: OffsetModel(offset=offset), "consumer")
     tuned = tune("tn", consumer=consumer, source=source, logic=_mean_of_source)
-    model = split("tt", tuned, train_filter=pl.col("x") < 5, test_filter=pl.col("x") >= 5)
+    model = split(
+        "tt", tuned, train_filter=pl.col("x") < 5, test_filter=pl.col("x") >= 5
+    )
     model.fit(test_dataframe)
 
     assert model.fitted["source"].seen == [1, 2, 3, 4]
@@ -316,7 +323,9 @@ def test_ensemble_over_lift(test_dataframe):
 
 def test_ensemble_over_split(test_dataframe):
     m = leaf(lambda: MockModel(x_column="x"), "m")
-    bounded = split("tt", m, train_filter=pl.col("x") <= 4, test_filter=pl.col("x") >= 5)
+    bounded = split(
+        "tt", m, train_filter=pl.col("x") <= 4, test_filter=pl.col("x") >= 5
+    )
     solo = leaf(lambda: MockModel(x_column="x"), "solo")
     model = ensemble("ens", bounded, solo)
     model.fit(test_dataframe)
@@ -466,12 +475,16 @@ def test_feed_with_lift_in_source_and_consumer(test_dataframe):
 
 def test_feed_with_split_in_source(test_dataframe):
     src = leaf(lambda: MockModel(x_column="x"), "src")
-    bounded = split("src_tt", src, train_filter=pl.col("x") <= 4, test_filter=pl.lit(True))
+    bounded = split(
+        "src_tt", src, train_filter=pl.col("x") <= 4, test_filter=pl.lit(True)
+    )
     cons = leaf(lambda: ConsumerModel(source_col="src"), "cons")
     model = feed("d", source=bounded, consumer=cons)
 
     with warnings.catch_warnings():
-        warnings.simplefilter("error")  # source test covers all rows -> no NaN/leak warning
+        warnings.simplefilter(
+            "error"
+        )  # source test covers all rows -> no NaN/leak warning
         model.fit(test_dataframe)
 
     assert model.fitted["src"].seen == [1, 2, 3, 4]
@@ -544,6 +557,7 @@ def test_feed_with_tune_in_source(test_dataframe):
 # ── Tune as outer (inner node in the source) ───────────────────────
 # All tunes use a shared 'offset' logic
 
+
 def test_tune_with_lift_in_source(test_dataframe):
     s = leaf(lambda: MockModel(x_column="x"), "s")
     lifted = lift(
@@ -568,7 +582,9 @@ def test_tune_with_lift_in_source(test_dataframe):
 
 def test_tune_with_split_in_source(test_dataframe):
     s = leaf(lambda: MockModel(x_column="x"), "s")
-    bounded = split("src_tt", s, train_filter=pl.col("x") <= 4, test_filter=pl.lit(True))
+    bounded = split(
+        "src_tt", s, train_filter=pl.col("x") <= 4, test_filter=pl.lit(True)
+    )
     c = leaf(lambda offset=0.0: OffsetModel(offset=offset), "c")
     model = tune("tn", consumer=c, source=bounded, logic=lambda m, df: {"offset": 3.0})
     model.fit(test_dataframe)
@@ -616,9 +632,13 @@ def test_tune_with_feed_in_source(test_dataframe):
 def test_tune_with_tune_in_source(test_dataframe):
     inner_src = leaf(lambda: MockModel(x_column="x"), "is")
     ic = leaf(lambda offset=0.0: OffsetModel(offset=offset), "ic")
-    inner = tune("inner", consumer=ic, source=inner_src, logic=lambda m, df: {"offset": 2.0})
+    inner = tune(
+        "inner", consumer=ic, source=inner_src, logic=lambda m, df: {"offset": 2.0}
+    )
     oc = leaf(lambda offset=0.0: OffsetModel(offset=offset), "oc")
-    model = tune("outer", consumer=oc, source=inner, logic=lambda m, df: {"offset": 3.0})
+    model = tune(
+        "outer", consumer=oc, source=inner, logic=lambda m, df: {"offset": 3.0}
+    )
     model.fit(test_dataframe)
 
     assert model.fitted["is"].seen == FULL
@@ -654,11 +674,15 @@ def test_source_tune_hyperparameter_does_not_leak_up(test_dataframe):
     # Inner Tune sits in the outer Tune's SOURCE: its learned `inner_p` must stay scoped
     # to the inner consumer and not reach the outer consumer.
     inner = tune(
-        "inner", consumer=_recorder("ic"), source=_recorder("is"),
+        "inner",
+        consumer=_recorder("ic"),
+        source=_recorder("is"),
         logic=lambda m, df: {"inner_p": 2.0},
     )
     outer = tune(
-        "outer", consumer=_recorder("oc"), source=inner,
+        "outer",
+        consumer=_recorder("oc"),
+        source=inner,
         logic=lambda m, df: {"outer_p": 3.0},
     )
     outer.fit(test_dataframe)
@@ -672,15 +696,21 @@ def test_learner_tune_inherits_outer_hyperparameter(test_dataframe):
     # Inner Tune sits in the outer Tune's LEARNER: it inherits the outer's `outer_p`
     # across its whole subtree, on top of its own `inner_p`.
     inner = tune(
-        "inner", consumer=_recorder("ic"), source=_recorder("is"),
+        "inner",
+        consumer=_recorder("ic"),
+        source=_recorder("is"),
         logic=lambda m, df: {"inner_p": 2.0},
     )
     outer = tune(
-        "outer", consumer=inner, source=_recorder("os"),
+        "outer",
+        consumer=inner,
+        source=_recorder("os"),
         logic=lambda m, df: {"outer_p": 3.0},
     )
     outer.fit(test_dataframe)
 
     assert outer.fitted["ic"].received == {"outer_p": 3.0, "inner_p": 2.0}
-    assert outer.fitted["is"].received == {"outer_p": 3.0}  # inherited, before inner learns
+    assert outer.fitted["is"].received == {
+        "outer_p": 3.0
+    }  # inherited, before inner learns
     assert outer.fitted["os"].received == {}  # outer source sees nothing learned
