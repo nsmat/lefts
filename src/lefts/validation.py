@@ -5,6 +5,7 @@ from .nodes import LeftsNode, Leaf, Lift, Feed, Tune
 
 _RESERVED_COLUMN_NAMES = {"__lefts_row_index"}
 
+
 def _validate(root: LeftsNode) -> None:
     _check_unique_node_names(root)
     _check_no_lift_above_incompatible_nodes(root, under_lift=False)
