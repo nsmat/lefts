@@ -2,7 +2,7 @@ import pytest
 from dataclasses import dataclass
 import polars as pl
 
-from lefts.nodes import Lift, Leaf, Split, Ensemble, Feed
+from lefts.nodes import Lift, Leaf, Split, Ensemble, Feed, Tune
 from lefts.validation import _validate
 
 
@@ -86,6 +86,34 @@ def test_split_above_feed_passes():
     node = Split(
         name="tt",
         child=inner_feed,
+        train_filter=pl.lit(True),
+        test_filter=pl.lit(True),
+    )
+    _validate(node)  # no raise
+
+
+def test_lift_above_tune_raises():
+    inner_tune = Tune(
+        name="tn",
+        consumer=_leaf("cons"),
+        source=_leaf("src"),
+        logic=lambda model, df: {},
+    )
+    root = _trivial_lift(inner_tune, name="tt")
+    with pytest.raises(ValueError, match="has a Lift as an ancestor"):
+        _validate(root)
+
+
+def test_split_above_tune_passes():
+    inner_tune = Tune(
+        name="tn",
+        consumer=_leaf("cons"),
+        source=_leaf("src"),
+        logic=lambda model, df: {},
+    )
+    node = Split(
+        name="tt",
+        child=inner_tune,
         train_filter=pl.lit(True),
         test_filter=pl.lit(True),
     )
